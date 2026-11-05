@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { configs } from '../../src';
+import { configs } from '../../src/app';
 import { configForFile, lintRule, loadConfigs, severityOf, statements } from '../helpers';
 
-const config = configs.javascript;
+const config = configs.javascript();
 const FILE = 'src/some-file.js';
 
 const ifChain = (count: number): string =>
@@ -12,6 +12,14 @@ const nestedIfs = (depth: number): string => {
   const open = Array.from({ length: depth }, (_, index) => `if (a${index}) {`).join('\n');
   return `${open}\nfoo();\n${'}\n'.repeat(depth)}`;
 };
+
+describe('no-restricted-imports', () => {
+  it('is not part of the javascript preset (see the aliases preset)', async () => {
+    expect(await lintRule(config, 'no-restricted-imports')(FILE, "import a from '../a';")).toEqual(
+      [],
+    );
+  });
+});
 
 describe('max-params (max 3)', () => {
   it('allows 3 params', async () => {
@@ -50,38 +58,85 @@ describe('max-depth (max 4)', () => {
   });
 });
 
-describe('max-lines (max 400, skip blank lines and comments)', () => {
+describe('max-lines (max 500, skip blank lines and comments)', () => {
   const padding = '\n\n// comment\n/* block\n   comment */\n'.repeat(20);
 
-  it('allows 400 code lines plus blank lines and comments', async () => {
-    const code = `${padding}${statements(400)}${padding}`;
+  it('allows 500 code lines plus blank lines and comments', async () => {
+    const code = `${padding}${statements(500)}${padding}`;
     expect(await lintRule(config, 'max-lines')(FILE, code)).toEqual([]);
   });
 
-  it('reports 401 code lines', async () => {
-    expect(await lintRule(config, 'max-lines')(FILE, statements(401))).toHaveLength(1);
+  it('reports 501 code lines', async () => {
+    expect(await lintRule(config, 'max-lines')(FILE, statements(501))).toHaveLength(1);
   });
 
   it('is off for eslint.config.* files', async () => {
-    expect(await lintRule(config, 'max-lines')('eslint.config.js', statements(401))).toEqual([]);
+    expect(await lintRule(config, 'max-lines')('eslint.config.js', statements(501))).toEqual([]);
+  });
+
+  it('is off for test files', async () => {
+    expect(await lintRule(config, 'max-lines')('test/some-file.js', statements(501))).toEqual([]);
   });
 });
 
-describe('max-lines-per-function (max 80, skip blank lines and comments, IIFEs)', () => {
+describe('max-lines-per-function (max 100, skip blank lines and comments, IIFEs)', () => {
   const fn = (bodyLines: number): string =>
     `export const f = () => {\n\n// comment\n${statements(bodyLines, '  ')}\n\n};`;
 
-  it('allows 80 lines', async () => {
-    expect(await lintRule(config, 'max-lines-per-function')(FILE, fn(78))).toEqual([]);
+  it('allows 100 lines', async () => {
+    expect(await lintRule(config, 'max-lines-per-function')(FILE, fn(98))).toEqual([]);
   });
 
-  it('reports 81 lines', async () => {
-    expect(await lintRule(config, 'max-lines-per-function')(FILE, fn(79))).toHaveLength(1);
+  it('reports 101 lines', async () => {
+    expect(await lintRule(config, 'max-lines-per-function')(FILE, fn(99))).toHaveLength(1);
   });
 
   it('checks IIFEs', async () => {
-    const code = `(() => {\n${statements(79, '  ')}\n})();`;
+    const code = `(() => {\n${statements(99, '  ')}\n})();`;
     expect(await lintRule(config, 'max-lines-per-function')(FILE, code)).toHaveLength(1);
+  });
+
+  it.each(['test/some-file.js', 'test/nested/deep/some-file.test.js'])(
+    'is off for test files (%s)',
+    async (file) => {
+      expect(await lintRule(config, 'max-lines-per-function')(file, fn(99))).toEqual([]);
+    },
+  );
+
+  it.each(['src/some-file.test.js', 'tests/some-file.js'])(
+    'applies outside test/ (%s)',
+    async (file) => {
+      expect(await lintRule(config, 'max-lines-per-function')(file, fn(99))).toHaveLength(1);
+    },
+  );
+
+  describe('with custom testFiles', () => {
+    const custom = configs.javascript({ testFiles: ['tests/**/*.js', '**/*.e2e.js'] });
+
+    it.each(['tests/some-file.js', 'src/some-file.e2e.js'])(
+      'is off for matching files (%s)',
+      async (file) => {
+        expect(await lintRule(custom, 'max-lines-per-function')(file, fn(99))).toEqual([]);
+      },
+    );
+
+    it('replaces the default globs', async () => {
+      const lint = lintRule(custom, 'max-lines-per-function');
+      expect(await lint('src/some-file.test.js', fn(99))).toHaveLength(1);
+    });
+  });
+
+  describe('without test files', () => {
+    const none = configs.javascript({ testFiles: [] });
+
+    it('has no tests block', () => {
+      expect(none.map((entry) => entry.name)).not.toContain('uselab/javascript/tests');
+    });
+
+    it('applies to test/', async () => {
+      const lint = lintRule(none, 'max-lines-per-function');
+      expect(await lint('test/some-file.js', fn(99))).toHaveLength(1);
+    });
   });
 });
 
@@ -179,7 +234,7 @@ describe('dev-mode severity', () => {
     ['CI', { CI: 'true', NODE_ENV: 'production' }, 2],
   ])('%s', async (_label, env, expected) => {
     const loaded = await loadConfigs(env);
-    const resolved = await configForFile(loaded.javascript, FILE);
+    const resolved = await configForFile(loaded.javascript(), FILE);
     for (const rule of devRules) {
       expect(severityOf(resolved, rule), rule).toBe(expected);
     }

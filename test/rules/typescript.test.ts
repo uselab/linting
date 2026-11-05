@@ -1,9 +1,9 @@
 import type { Linter } from 'eslint';
 import { describe, expect, it } from 'vitest';
-import { configs } from '../../src';
+import { configs } from '../../src/app';
 import { byRule, configForFile, lintRule, lintSnippet, loadConfigs, severityOf } from '../helpers';
 
-const config = [...configs.javascript, ...configs.typescript];
+const config = [...configs.javascript(), ...configs.typescript];
 const FILE = 'src/some-file.ts';
 
 const applyFix = (code: string, message: Linter.LintMessage | undefined): string => {
@@ -87,7 +87,7 @@ describe('no-unused-vars swap', () => {
     ['CI', { CI: 'true', NODE_ENV: 'production' }, 2],
   ])('uses dev-mode severity: %s', async (_label, env, expected) => {
     const loaded = await loadConfigs(env);
-    const resolved = await configForFile([...loaded.javascript, ...loaded.typescript], FILE);
+    const resolved = await configForFile([...loaded.javascript(), ...loaded.typescript], FILE);
     expect(severityOf(resolved, '@typescript-eslint/no-unused-vars')).toBe(expected);
   });
 });

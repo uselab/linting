@@ -1,8 +1,8 @@
-﻿import path from 'node:path';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ESLint, type Linter } from 'eslint';
 import { expect, vi } from 'vitest';
-import type { Config, configs as Configs } from '../src';
+import type { Config, configs as Configs } from '../src/app';
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
@@ -98,7 +98,7 @@ export const loadConfigs = async (env: Record<string, string>): Promise<typeof C
     vi.stubEnv(key, value);
   }
   try {
-    const module = await import('../src');
+    const module = await import('../src/app');
     return module.configs;
   } finally {
     vi.unstubAllEnvs();

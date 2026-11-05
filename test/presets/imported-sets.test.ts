@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { configs } from '../../src';
+import { configs } from '../../src/app';
 import { configForFile, severityOf } from '../helpers';
 
 /** Imported rule sets are not tested in depth: only that each set is active, via one known rule. */
 describe('imported rule sets', () => {
-  const all = [...configs.javascript, ...configs.typescript, ...configs.vue, ...configs.react];
+  const all = [...configs.javascript(), ...configs.typescript, ...configs.vue, ...configs.react];
 
   it.each([
     ['@eslint/js recommended', 'src/a.js', 'no-undef'],
@@ -25,7 +25,7 @@ describe('imported rule sets', () => {
   });
 
   it('globals: node preset defines Node globals', async () => {
-    const resolved = await configForFile([...configs.javascript, ...configs.node], 'src/a.js');
+    const resolved = await configForFile([...configs.javascript(), ...configs.node], 'src/a.js');
     expect(resolved.languageOptions?.globals).toHaveProperty('process');
   });
 });

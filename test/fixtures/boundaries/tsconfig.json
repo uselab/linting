@@ -1,1 +1,15 @@
-{ "compilerOptions": { "module": "ESNext", "moduleResolution": "Bundler", "strict": true, "baseUrl": ".", "paths": { "@/*": ["src/*"] } }, "include": ["src"] }
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@app/*": ["./src/app/*"],
+      "@features/*": ["./src/features/*"],
+      "@support/*": ["./src/support/*"]
+    }
+  },
+  "include": ["src"]
+}
+

@@ -1,8 +1,9 @@
-import { configs } from './src';
+import { globalIgnores } from 'eslint/config';
+import { configs } from '@uselab/linting';
 
 export default [
-  ...configs.ignores(['test/fixtures/**']),
-  ...configs.javascript,
+  globalIgnores(['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.tsbuildinfo']),
+  ...configs.javascript(),
   ...configs.typescript,
   ...configs.node,
   {
@@ -17,5 +18,6 @@ export default [
       'max-lines-per-function': 'off',
     },
   },
+  ...configs.boundaries({ tsconfig: 'tsconfig.json' }),
   ...configs.prettier,
 ];

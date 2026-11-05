@@ -1,3 +1,3 @@
-import config from './src/prettier/index.ts';
+import config from './src/features/prettier/index.ts';
 
 export default config;

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { configs, type Config } from '../../src';
+import { configs, type Config } from '../../src/app';
 import { lintRule } from '../helpers';
 
-const config = [...configs.javascript, ...configs.typescript, ...configs.vue];
+const config = [...configs.javascript(), ...configs.typescript, ...configs.vue];
 const FILE = 'src/components/user-card.vue';
 
 const sfc = (template: string, script = ''): string =>
@@ -112,48 +112,59 @@ describe('vue/no-restricted-syntax', () => {
   });
 });
 
-describe('vue/max-lines-per-block (template 120, script 250, style 250, skip blank lines)', () => {
+describe('vue/max-lines-per-block (template 200, script 300, style 300, skip blank lines)', () => {
   const rule = 'vue/max-lines-per-block';
   const block = (tag: string, lines: string): string =>
     `<${tag}>\n${lines}\n</${tag.split(' ')[0]}>\n`;
   const blank = '\n\n\n';
 
-  it('allows 120 template lines plus blank lines', async () => {
-    const code = block('template', `${blank}${repeat(120, '<p>$i</p>')}${blank}`);
+  it('allows 200 template lines plus blank lines', async () => {
+    const code = block('template', `${blank}${repeat(200, '<p>$i</p>')}${blank}`);
     expect(await lintRule(config, rule)(FILE, code)).toEqual([]);
   });
 
-  it('reports 121 template lines', async () => {
+  it('reports 201 template lines', async () => {
     expect(
-      await lintRule(config, rule)(FILE, block('template', repeat(121, '<p>$i</p>'))),
+      await lintRule(config, rule)(FILE, block('template', repeat(201, '<p>$i</p>'))),
     ).toHaveLength(1);
   });
 
-  it('allows 250 script lines', async () => {
-    const code = block('script setup lang="ts"', repeat(250, 'const a$i = $i;'));
+  it('allows 300 script lines', async () => {
+    const code = block('script setup lang="ts"', repeat(300, 'const a$i = $i;'));
     expect(await lintRule(config, rule)(FILE, code)).toEqual([]);
   });
 
-  it('reports 251 script lines', async () => {
-    const code = block('script setup lang="ts"', repeat(251, 'const a$i = $i;'));
+  it('reports 301 script lines', async () => {
+    const code = block('script setup lang="ts"', repeat(301, 'const a$i = $i;'));
     expect(await lintRule(config, rule)(FILE, code)).toHaveLength(1);
   });
 
-  it('allows 250 style lines', async () => {
-    const code = block('style', repeat(250, '.a$i { color: red; }'));
+  it('allows 300 style lines', async () => {
+    const code = block('style', repeat(300, '.a$i { color: red; }'));
     expect(await lintRule(config, rule)(FILE, code)).toEqual([]);
   });
 
-  it('reports 251 style lines', async () => {
-    const code = block('style', repeat(251, '.a$i { color: red; }'));
+  it('reports 301 style lines', async () => {
+    const code = block('style', repeat(301, '.a$i { color: red; }'));
     expect(await lintRule(config, rule)(FILE, code)).toHaveLength(1);
+  });
+});
+
+describe('max-lines (off for .vue files)', () => {
+  it('allows a file over 500 lines when every block is within its limit', async () => {
+    const code = [
+      `<template>\n<div>\n${repeat(198, '<p>$i</p>')}\n</div>\n</template>`,
+      `<script setup lang="ts">\n${repeat(300, 'const a$i = $i;')}\n</script>`,
+      `<style>\n${repeat(300, '.a$i { color: red; }')}\n</style>\n`,
+    ].join('\n');
+    expect(await lintRule(config, 'max-lines')(FILE, code)).toEqual([]);
   });
 });
 
 describe('preset order', () => {
   const orders: [string, Config[]][] = [
-    ['vue before typescript', [...configs.javascript, ...configs.vue, ...configs.typescript]],
-    ['vue after typescript', [...configs.javascript, ...configs.typescript, ...configs.vue]],
+    ['vue before typescript', [...configs.javascript(), ...configs.vue, ...configs.typescript]],
+    ['vue after typescript', [...configs.javascript(), ...configs.typescript, ...configs.vue]],
   ];
 
   it.each(orders)('parses <script lang="ts"> and applies options (%s)', async (_label, ordered) => {

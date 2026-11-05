@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { configs, type Config } from '../../src';
+import { configs, type Config } from '../../src/app';
 import { lintRule } from '../helpers';
 
-const config = [...configs.javascript, ...configs.browser];
+const config = [...configs.javascript(), ...configs.browser];
 
 describe('classList mutation (no-restricted-syntax)', () => {
   const rule = 'no-restricted-syntax';
@@ -40,11 +40,11 @@ describe('classList mutation (no-restricted-syntax)', () => {
   const orders: [string, Config[]][] = [
     [
       'browser before react',
-      [...configs.javascript, ...configs.typescript, ...configs.browser, ...configs.react],
+      [...configs.javascript(), ...configs.typescript, ...configs.browser, ...configs.react],
     ],
     [
       'browser after react',
-      [...configs.javascript, ...configs.typescript, ...configs.react, ...configs.browser],
+      [...configs.javascript(), ...configs.typescript, ...configs.react, ...configs.browser],
     ],
   ];
 
@@ -71,7 +71,7 @@ describe('no-restricted-properties', () => {
         ? "<script setup lang=\"ts\">\ndocument.body.setAttribute('a', 'b');\n</script>\n"
         : "document.body.setAttribute('a', 'b');";
       const full = [
-        ...configs.javascript,
+        ...configs.javascript(),
         ...configs.typescript,
         ...configs.vue,
         ...configs.browser,

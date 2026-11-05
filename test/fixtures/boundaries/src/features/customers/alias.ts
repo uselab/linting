@@ -1,3 +1,3 @@
-import { orders } from '@/features/orders';
+import { orders } from '@features/orders';
 
 export const aliasOrders = (): string => orders();

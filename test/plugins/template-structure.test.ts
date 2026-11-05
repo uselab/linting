@@ -1,7 +1,7 @@
 import { RuleTester } from 'eslint';
 import vueParser from 'vue-eslint-parser';
 import { describe, it } from 'vitest';
-import { plugins } from '../../src';
+import { plugins } from '../../src/app';
 
 RuleTester.describe = describe;
 RuleTester.it = it;
@@ -41,6 +41,30 @@ ruleTester.run('template-structure/no-redundant-conditional-wrapper', rule, {
     {
       name: 'conditional is not the first attribute',
       code: template('<div class="box" v-if="show"><p>a</p></div>'),
+    },
+    {
+      name: 'class attribute makes the wrapper meaningful',
+      code: template('<div v-if="show" class="box"><p>a</p></div>'),
+    },
+    {
+      name: 'bound class makes the wrapper meaningful',
+      code: template('<div v-if="show" :class="cls"><p>a</p></div>'),
+    },
+    {
+      name: 'style makes the wrapper meaningful',
+      code: template('<span v-if="show" style="color: red"><b>a</b></span>'),
+    },
+    {
+      name: 'v-show makes the wrapper meaningful',
+      code: template('<div v-if="show" v-show="visible"><p>a</p></div>'),
+    },
+    {
+      name: 'object v-bind makes the wrapper meaningful',
+      code: template('<div v-if="show" v-bind="attrs"><p>a</p></div>'),
+    },
+    {
+      name: 'meaningful attribute next to ignorable ones',
+      code: template('<div key="a" v-if="show" @click="go" id="x"><p>a</p></div>'),
     },
     {
       name: 'other directive first',
@@ -86,8 +110,23 @@ ruleTester.run('template-structure/no-redundant-conditional-wrapper', rule, {
       errors: [error],
     },
     {
-      name: 'conditional first, other attributes after',
-      code: template('<div v-if="show" class="box"><p>a</p></div>'),
+      name: 'key is ignored',
+      code: template('<div v-if="show" key="a"><p>a</p></div>'),
+      errors: [error],
+    },
+    {
+      name: 'bound key before the conditional is ignored',
+      code: template('<div :key="id" v-if="show"><p>a</p></div>'),
+      errors: [error],
+    },
+    {
+      name: 'ref is ignored',
+      code: template('<div v-if="show" ref="wrapper"><p>a</p></div>'),
+      errors: [error],
+    },
+    {
+      name: 'event listeners are ignored',
+      code: template('<span v-if="show" @click="go" v-on:keyup="go"><b>a</b></span>'),
       errors: [error],
     },
     {

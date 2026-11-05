@@ -1,6 +1,6 @@
 import { format } from 'prettier';
 import { describe, expect, it } from 'vitest';
-import prettierConfig from '../src/prettier';
+import prettierConfig from '../src/app/prettier';
 
 const formatTs = async (code: string): Promise<string> =>
   format(code, { ...prettierConfig, filepath: 'example.ts' });

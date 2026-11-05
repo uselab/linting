@@ -1,0 +1,281 @@
+import { existsSync, statSync } from 'node:fs';
+import path from 'node:path';
+import * as clack from '@clack/prompts';
+import { excludeTestSrcDirs } from './detect';
+import {
+  DEFAULT_TEST_FILES,
+  type BoundariesAnswers,
+  type IgnoresAnswers,
+  type IgnoresMode,
+  type InitAnswers,
+  type JavaScriptAnswers,
+  type PresetId,
+} from './generate';
+
+const isAnswer = <T>(value: T): value is Exclude<T, symbol> => !clack.isCancel(value);
+
+/** Returns the prompt value, or exits cleanly when the user cancelled (Ctrl+C / Esc). */
+export const unwrap = <T>(value: T): Exclude<T, symbol> => {
+  if (isAnswer(value)) {
+    return value;
+  }
+  clack.cancel('Cancelled.');
+  return process.exit(0);
+};
+
+const PRESET_OPTIONS: { value: PresetId; label: string; hint: string }[] = [
+  { value: 'javascript', label: 'javascript', hint: 'base rules, required by the other presets' },
+  { value: 'typescript', label: 'typescript', hint: 'typescript-eslint for .ts/.tsx/.vue' },
+  { value: 'node', label: 'node', hint: 'Node.js globals (backends, CLIs, libraries)' },
+  { value: 'browser', label: 'browser', hint: 'browser globals + no imperative DOM mutation' },
+  { value: 'prettier', label: 'prettier', hint: 'disables conflicting rules + .prettierrc.json' },
+  { value: 'vue', label: 'vue', hint: 'eslint-plugin-vue + Vue house rules' },
+  { value: 'react', label: 'react', hint: '@eslint-react + react-hooks' },
+  {
+    value: 'aliases',
+    label: 'aliases',
+    hint: '@app / @features / @support instead of ../ imports; needs a bundler such as Vite',
+  },
+  {
+    value: 'boundaries',
+    label: 'boundaries',
+    hint: 'project structure, guided by the principles of Domain-Driven Design (DDD): app / features / support',
+  },
+];
+
+const splitList = (value: string): string[] =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+const asList = (value: string | string[] | undefined): string[] =>
+  value === undefined ? [] : [value].flat();
+
+const isKind = (file: string, kind: 'file' | 'directory'): boolean =>
+  existsSync(file) && (kind === 'file' ? statSync(file).isFile() : statSync(file).isDirectory());
+
+const missingMessage = (missing: string[], noun: string): string =>
+  `${noun} not found in the project: ${missing.join(', ')}`;
+
+/** Validates the src folders answer: at least one, and each must be a folder in the project. */
+export const validateSrcDirs = (
+  projectDir: string,
+  value: string | undefined,
+): string | undefined => {
+  const dirs = splitList(value ?? '');
+  if (dirs.length === 0) {
+    return 'Enter at least one folder.';
+  }
+  const missing = dirs.filter((dir) => !isKind(path.resolve(projectDir, dir), 'directory'));
+  return missing.length > 0 ? missingMessage(missing, 'Folder(s)') : undefined;
+};
+
+/** Validates the tsconfig answer: empty is allowed, else each must be a file in the project. */
+export const validateTsconfigs = (
+  projectDir: string,
+  value: string | undefined,
+): string | undefined => {
+  const missing = splitList(value ?? '').filter(
+    (file) => !isKind(path.resolve(projectDir, file), 'file'),
+  );
+  return missing.length > 0 ? missingMessage(missing, 'File(s)') : undefined;
+};
+
+/** Splits a comma separated list of globs, ignoring commas inside `{...}` braces. */
+export const splitGlobs = (value: string): string[] => {
+  const globs: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of value) {
+    if (char === ',' && depth === 0) {
+      globs.push(current);
+      current = '';
+    } else {
+      current += char;
+      if (char === '{') {
+        depth += 1;
+      } else if (char === '}' && depth > 0) {
+        depth -= 1;
+      }
+    }
+  }
+  globs.push(current);
+  return globs.map((glob) => glob.trim()).filter((glob) => glob.length > 0);
+};
+
+const askJavascript = async (
+  initial: JavaScriptAnswers | undefined,
+): Promise<JavaScriptAnswers> => {
+  const testFiles = splitGlobs(
+    unwrap(
+      await clack.text({
+        message:
+          'Test files: globs of files with relaxed rules (comma separated, empty = no test files)',
+        initialValue: (initial?.testFiles ?? DEFAULT_TEST_FILES).join(', '),
+        defaultValue: '',
+      }),
+    ),
+  );
+  return { testFiles };
+};
+
+const askBoundaries = async (
+  defaults: BoundariesDefaults,
+  initial: BoundariesAnswers | undefined,
+  testFiles: readonly string[],
+): Promise<BoundariesAnswers> => {
+  const srcDirs = splitList(
+    unwrap(
+      await clack.text({
+        message:
+          'Project structure (DDD): src folders with the app / features / support layout (comma separated)',
+        initialValue: (initial?.srcDirs ?? excludeTestSrcDirs(defaults.srcDirs, testFiles)).join(
+          ', ',
+        ),
+        validate: (value) => validateSrcDirs(defaults.projectDir, value),
+      }),
+    ),
+  );
+  const detected = defaults.tsconfigsFor(srcDirs);
+  const tsconfig = splitList(
+    unwrap(
+      await clack.text({
+        message:
+          'Project structure (DDD): tsconfig(s) that include these src folders, used to resolve imports (comma separated, empty = auto-detect)',
+        placeholder: 'tsconfig.app.json',
+        initialValue: asList(initial?.tsconfig ?? detected).join(', '),
+        defaultValue: '',
+        validate: (value) => validateTsconfigs(defaults.projectDir, value),
+      }),
+    ),
+  );
+  return {
+    srcDirs,
+    tsconfig: tsconfig.length === 0 ? undefined : tsconfig,
+  };
+};
+
+const IGNORES_OPTIONS: { value: IgnoresMode; label: string; hint: string }[] = [
+  { value: 'all', label: 'All files', hint: 'except dist, node_modules and coverage' },
+  {
+    value: 'exclude',
+    label: 'All files except some globs (opt-out)',
+    hint: 'e.g. legacy folders',
+  },
+  {
+    value: 'only',
+    label: 'Only specific globs (opt-in)',
+    hint: 'root config files are still linted; include test/** to lint tests',
+  },
+];
+
+const DEFAULT_OPT_IN_GLOBS = ['src/**'];
+
+const validateIgnoreGlobs = (value: string | undefined): string | undefined => {
+  const globs = splitGlobs(value ?? '');
+  if (globs.length === 0) {
+    return 'Enter at least one glob.';
+  }
+  return globs.some((glob) => glob.startsWith('!')) ? "Don't start globs with '!'." : undefined;
+};
+
+const askIgnoreGlobs = async (
+  mode: Exclude<IgnoresMode, 'all'>,
+  initial: IgnoresAnswers | undefined,
+): Promise<string[]> => {
+  const initialGlobs =
+    initial?.mode === mode ? initial.globs : mode === 'only' ? DEFAULT_OPT_IN_GLOBS : [];
+  return splitGlobs(
+    unwrap(
+      await clack.text({
+        message:
+          mode === 'only'
+            ? 'Globs of the files to lint (comma separated)'
+            : 'Globs of the files to skip (comma separated)',
+        placeholder: mode === 'only' ? 'src/**, test/**' : 'legacy/**, src/old/**',
+        initialValue: initialGlobs.join(', '),
+        validate: validateIgnoreGlobs,
+      }),
+    ),
+  );
+};
+
+/** Asks which files ESLint lints: all, all except some globs (opt-out) or only some (opt-in). */
+const askIgnores = async (initial: IgnoresAnswers | undefined): Promise<IgnoresAnswers> => {
+  const mode = unwrap(
+    await clack.select<IgnoresMode>({
+      message: 'Which files should ESLint lint?',
+      options: IGNORES_OPTIONS,
+      initialValue: initial?.mode ?? 'all',
+    }),
+  );
+  return mode === 'all'
+    ? { mode, globs: [] }
+    : { mode, globs: await askIgnoreGlobs(mode, initial) };
+};
+
+export type BoundariesDefaults = {
+  /** The project the answered folders and files are relative to. */
+  projectDir: string;
+  /** Detected src folders. */
+  srcDirs: string[];
+  /** The tsconfigs that include the given src folders. */
+  tsconfigsFor: (srcDirs: string[]) => string[];
+};
+
+export type AskOptions = {
+  initialPresets: PresetId[];
+  boundariesDefaults: BoundariesDefaults;
+  /** javascript options of an existing config, used as initial values. */
+  initialJavascript?: JavaScriptAnswers;
+  /** Boundaries options of an existing config, used as initial values. */
+  initialBoundaries?: BoundariesAnswers;
+  /** Lint scope of an existing config, used as initial value. Undefined when it isn't editable. */
+  initialIgnores?: IgnoresAnswers;
+  /** False when the existing `globalIgnores()` can't be rewritten; the scope isn't asked then. */
+  ignoresEditable?: boolean;
+};
+
+/**
+ * Asks which presets to use, plus the test file globs when javascript is selected, the
+ * boundaries options when boundaries is selected and which files ESLint lints.
+ */
+export const askAnswers = async ({
+  initialPresets,
+  boundariesDefaults,
+  initialJavascript,
+  initialBoundaries,
+  initialIgnores,
+  ignoresEditable = true,
+}: AskOptions): Promise<InitAnswers> => {
+  const presets = unwrap(
+    await clack.multiselect<PresetId>({
+      message: 'Which presets do you want?',
+      options: PRESET_OPTIONS,
+      initialValues: initialPresets,
+      required: true,
+    }),
+  );
+  if (!presets.includes('javascript')) {
+    clack.log.warn('The other presets build on `javascript`; you probably want to include it.');
+  }
+  if (presets.includes('vue') && presets.includes('react')) {
+    clack.log.warn('Both vue and react are selected. That is unusual, but allowed.');
+  }
+  const javascript = presets.includes('javascript')
+    ? await askJavascript(initialJavascript)
+    : undefined;
+  const boundaries = presets.includes('boundaries')
+    ? await askBoundaries(
+        boundariesDefaults,
+        initialBoundaries,
+        javascript?.testFiles ?? DEFAULT_TEST_FILES,
+      )
+    : undefined;
+  const ignores = ignoresEditable ? await askIgnores(initialIgnores) : undefined;
+  return { presets, javascript, boundaries, ignores };
+};
+
+export const confirm = async (message: string, initialValue = true): Promise<boolean> =>
+  unwrap(await clack.confirm({ message, initialValue }));
