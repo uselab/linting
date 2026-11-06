@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { PRESET_ORDER, type PresetId } from './generate';
+import { DEFAULT_TEST_FILES, PRESET_ORDER, type PresetId } from './generate';
 
 export type DetectablePackageJson = {
   bin?: unknown;
@@ -128,6 +128,20 @@ export const detectSrcDirs = (projectDir: string): string[] => {
     }
   }
   return found.length > 0 ? found.sort() : ['src'];
+};
+
+const TEST_DIRECTORY = /^te?sts?$/;
+
+/**
+ * Test file globs: `<folder>/**` for every folder in the project root named `test`, `tests`,
+ * `tst` or `tsts`. Falls back to `['test/**']`.
+ */
+export const detectTestFiles = (projectDir: string): string[] => {
+  const found = readdirSync(projectDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && TEST_DIRECTORY.test(entry.name))
+    .map((entry) => `${entry.name}/**`)
+    .sort();
+  return found.length > 0 ? found : [...DEFAULT_TEST_FILES];
 };
 
 /**

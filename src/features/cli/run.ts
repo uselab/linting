@@ -23,10 +23,8 @@ import {
 } from './copilot-hook';
 import {
   checkDependencies,
-  compareVersions,
   installCommand,
   isModulePackage,
-  minimumOfRange,
   needsUpdate,
   nodeTypesRange,
   patchPackageJson,
@@ -36,7 +34,7 @@ import {
   type PackageJson,
   type Requirement,
 } from './dependencies';
-import { detectPresets, detectSrcDirs, type Detection } from './detect';
+import { detectPresets, detectSrcDirs, detectTestFiles, type Detection } from './detect';
 import { checkGit } from './git';
 import { type TrackedFiles, trackFiles } from './tracked-files';
 import {
@@ -70,13 +68,16 @@ import { typecheckScript, updateViteChecker } from './typecheck';
 import { findViteConfig, viteConfigNeedsNodeTypes } from './vite';
 import { updateSourceTsconfigs, updateViteConfig } from './aliases';
 import { runAnalyze } from './analyze';
+import { offerAnalyze } from './analyze-offer';
+import { isInstalledOutdated } from './install';
 
 export const USAGE = `Usage: uselab-linting init [dir]
        uselab-linting analyze [dir]
        uselab-linting copilot-hook
 
 Sets up @uselab/linting in a project. Detects the framework to preselect presets, replaces any
-existing lint/format tooling and applies the setup without further questions. The directory must
+existing lint/format tooling and applies the setup without further questions. Finally it offers to
+run analyze (installing the dependencies first when needed). The directory must
 be inside a git repository without uncommitted changes.
 
   dir            Target project directory (default: current directory)
@@ -283,12 +284,7 @@ const describeCheck = (check: DependencyCheck): string =>
 
 const warnOutdatedInstalls = (projectDir: string, checks: DependencyCheck[]): void => {
   for (const check of checks.filter(({ status }) => status === 'ok')) {
-    const file = path.join(projectDir, 'node_modules', check.name, 'package.json');
-    const installed = existsSync(file)
-      ? minimumOfRange(JSON.parse(readFileSync(file, 'utf8')).version ?? '')
-      : undefined;
-    const required = minimumOfRange(check.minVersion);
-    if (installed && required && compareVersions(installed, required) < 0) {
+    if (isInstalledOutdated(projectDir, check)) {
       clack.log.warn(`Installed ${check.name} is older than ${check.minVersion}; run npm install.`);
     }
   }
@@ -446,6 +442,7 @@ const askPresets = async (
       srcDirs: detectSrcDirs(projectDir),
       tsconfigsFor: (srcDirs) => findSourceTsconfigs(projectDir, srcDirs).map(({ file }) => file),
     },
+    detectedTestFiles: detectTestFiles(projectDir),
     initialJavascript: existing?.config.javascript,
     initialBoundaries: existing?.config.boundaries,
     initialIgnores: existing?.config.ignores,
@@ -502,17 +499,21 @@ const init = async (projectDir: string): Promise<void> => {
   }
   const viteChecker = updateViteChecker(projectDir, answers, tsconfig);
   const nodeTypes = updateNodeTypes(tracked, readPackageJson(projectDir));
-  const dependencies = updateDependencies(
-    projectDir,
-    requiredDependencies(answers.presets, ownVersion(), { nodeTypes, viteChecker }),
-    readPackageJson(projectDir),
-  );
+  const requirements = requiredDependencies(answers.presets, ownVersion(), {
+    nodeTypes,
+    viteChecker,
+  });
+  const dependencies = updateDependencies(projectDir, requirements, readPackageJson(projectDir));
   updateScripts(projectDir, answers, readPackageJson(projectDir));
   if (copilotHook) {
     writeCopilotHook(tracked);
   }
   tracked.stage();
-  printNextSteps(projectDir, installStep(dependencies, report.dependencies.length > 0));
+  const install = installStep(dependencies, report.dependencies.length > 0);
+  if (await offerAnalyze(projectDir, requirements, install)) {
+    return;
+  }
+  printNextSteps(projectDir, install);
   clack.outro('Done.');
 };
 

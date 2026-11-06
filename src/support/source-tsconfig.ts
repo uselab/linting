@@ -36,6 +36,16 @@ export const normalizeSrcDir = (srcDir: string): string =>
     .replace(/^(?:\.\/)+/, '')
     .replace(/\/+$/, '');
 
+export const NESTED_SRC_DIRS_MESSAGE = 'Boundaries cannot be nested';
+
+/** Whether one src dir lies inside another (after normalizing). */
+export const hasNestedSrcDirs = (srcDirs: string[]): boolean => {
+  const normalized = srcDirs.map(normalizeSrcDir);
+  return normalized.some((srcDir) =>
+    normalized.some((other) => srcDir !== other && srcDir.startsWith(`${other}/`)),
+  );
+};
+
 export const readTsconfig = (
   projectDir: string,
   absolutePath: string,

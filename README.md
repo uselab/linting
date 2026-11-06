@@ -28,13 +28,13 @@ Running it without a command (`npx @uselab/linting`) in an interactive terminal 
 The CLI replaces the existing lint/format setup of the project with the Uselab setup. It:
 
 - detects the project and preselects presets accordingly, showing why: `javascript` and `boundaries` (the [project structure](#project-structure-boundaries)) always; `prettier` when the project has any file Prettier can format (the reason shows the first matched type in the order `.ts`, `.js`, `.vue`, `.jsx`, `.tsx`, `.json`, then the rest: `.mjs`, `.cjs`, `.mts`, `.cts`, `.jsonc`, `.json5`, `.css`, `.scss`, `.less`, `.html`, `.md`, `.yaml`, `.graphql`, ...; `node_modules`, build output and dot directories are skipped); `typescript` for a tsconfig, `typescript` dependency or `.ts` files in `src`; `vue` for `vue` / `nuxt`; `react` for `react` / `react-dom` / `next`; `browser` for vue / react / svelte / vite or an `index.html`; `aliases` for a bundler that resolves path aliases (vite / nuxt / next / webpack / `@rsbuild/core` / parcel); `node` for express / fastify / koa / hono / `@nestjs/*`, a `bin` field, or when nothing browser-related is found. Presets of an existing `@uselab/linting` config are preselected too;
-- prompts for the presets (`javascript`, `typescript`, `node`, `browser`, `prettier`, `vue`, `react`, `aliases`, `boundaries`; plus, for `javascript`, the [test file globs](#test-files) (comma separated, prefilled with those of an existing config or the default `test/**`), and for `boundaries` (project structure), the [src folders](#project-structure-boundaries) (prefilled with those of an existing config, else the `src` folders that contain `app/`, `features/` or `support/` outside the test file globs (e.g. not `test/fixtures/app/src`), else `src`) and the tsconfig(s) that include them (prefilled with those of an existing config, else the detected ones; leave empty to let the preset detect them)), and which files ESLint lints: all files, all except some globs (opt-out, e.g. `legacy/**`) or only some globs (opt-in, e.g. `src/**, test/**`; root config files such as `eslint.config.ts` are still linted). The scope is written to [`globalIgnores()`](#ignores), together with the default ignores, and preselected from an existing config;
+- prompts for the presets (`javascript`, `typescript`, `node`, `browser`, `prettier`, `vue`, `react`, `aliases`, `boundaries`; plus, for `javascript`, the [test file globs](#test-files) (comma separated, prefilled with those of an existing config or the default `test/**`), and for `boundaries` (project structure), the [src folders](#project-structure-boundaries) (prefilled with those of an existing config, else the `src` folders that contain `app/`, `features/` or `support/` outside the test file globs (e.g. not `test/fixtures/app/src`), else `src`) and the tsconfig(s) that include them (prefilled with those of an existing config, else the detected ones; leave empty to let the preset detect them)), and which files ESLint lints: all files, all except some globs (opt-out, e.g. `legacy/**`) or only some globs (opt-in, e.g. `src/**, test/**`; a `!glob` skips files within them, e.g. `!src/legacy/**`; root config files such as `eslint.config.ts` are still linted). The scope is written to [`globalIgnores()`](#ignores), together with the default ignores, and preselected from an existing config;
 - sets `"type": "module"` in `package.json` when it is missing or e.g. `"commonjs"`. This decides the config file name: `eslint.config.ts` in `"type": "module"` projects, otherwise `eslint.config.mts` (`.mts` is always an ES module, while a `.ts` file follows `"type"`). It scans the `.js`, `.jsx`, `.ts` and `.tsx` files (skipping `node_modules`, build output, dot directories, the lint/format configs it replaces, minified files (`*.min.*` or a line over 500 characters) and UMD wrappers (`typeof module` / `typeof exports` / `define.amd`, which fall back to a global as an ES module)) for CommonJS code that breaks as an ES module: `require()`, `module.exports`, `exports.x =`, `__dirname`, `__filename`, `import x = require()` and `export =`. It lists up to 10 lines with CommonJS code (`file:line  patterns`). When set while there is CommonJS code, all places are written to `REFACTOR-COMMON-JS.md` as a checklist (one item per line, with the code shortened to about 100 characters around the match) with how to fix them (convert, or rename the file to `.cjs` / `.cts`);
 - adds a [GitHub Copilot hook](#github-copilot-hook);
 - removes the existing lint/format tooling: other `eslint.config.*` files, legacy `.eslintrc*` / `.eslintignore`, other Prettier configs (`.prettierrc*`, `prettier.config.*`), Biome, TSLint, XO, oxlint and dprint configs, the `eslintConfig`, `eslintIgnore`, `prettier`, `standard` and `xo` keys of `package.json`, and the packages they used (`@eslint/*`, `eslint-plugin-*`, `eslint-config-*`, `@scope/eslint-config*`, `typescript-eslint`, `@typescript-eslint/*`, `prettier-plugin-*`, `@biomejs/biome`, `tslint`, `standard`, `xo`, `oxlint`, `dprint`, ...). `eslint`, `prettier`, `jiti`, `typescript`, `globals` and `.prettierignore` are kept;
 - writes `eslint.config.ts` / `eslint.config.mts` (and `prettier.config.ts` / `prettier.config.mts` when `prettier` is selected, with the same `.ts` / `.mts` choice), overwriting existing files. An existing `prettier.config.ts` / `.mts` that already extends `@uselab/linting/prettier` is kept (renamed when the extension changes), so your overrides survive. If the project already has a `@uselab/linting` config (`export default [...]` or `defineConfig([...])`, also under another `eslint.config.*` name, which is then renamed), it is updated in place instead: selected presets are added in the canonical order, deselected ones removed, changed `javascript()` test file globs, `boundaries()` options and `globalIgnores()` lint scope rewritten (the `...configs.javascript` spread of older versions becomes `...configs.javascript()`, and the removed `...configs.ignores([...])` becomes `globalIgnores([...])`) (options of 1.x that no longer exist, such as `include` or `elements`, are dropped with a warning; a `globalIgnores()` or `configs.ignores()` with non-literal patterns is left unchanged with a warning, and the scope isn't asked), while custom entries are kept;
 - adds or updates what the ESLint config needs in `devDependencies` (`eslint`, `jiti`, `@uselab/linting`, plus `prettier`, `typescript`, `vue-tsc` (with `typescript` + `vue`) and `vite-plugin-checker`, depending on the presets);
-- writes the `lint` / `lint:fix` scripts (plus `format` / `format:check` when `prettier` is selected, and `typecheck` when `typescript` is selected) to `package.json`, overwriting existing scripts with those names, and warns about other scripts that still run removed tools. `typecheck` uses `vue-tsc` with the `vue` preset, otherwise `tsc`: `-b` for a solution-style root tsconfig (`references` with `files: []` or without `files` / `include`), else `--noEmit` (plus `--noEmit -p tsconfig.node.json` when that file exists). Without a tsconfig, no `typecheck` script is written and it warns. It is a separate script, so run it next to `lint` in CI;
+- writes the `lint` / `lint:fix` / `lint:analyze` (`uselab-linting analyze`) scripts (plus `format` / `format:check` when `prettier` is selected, and `typecheck` when `typescript` is selected) to `package.json`, overwriting existing scripts with those names, and warns about other scripts that still run removed tools. `typecheck` uses `vue-tsc` with the `vue` preset, otherwise `tsc`: `-b` for a solution-style root tsconfig (`references` with `files: []` or without `files` / `include`), else `--noEmit` (plus `--noEmit -p tsconfig.node.json` when that file exists). Without a tsconfig, no `typecheck` script is written and it warns. It is a separate script, so run it next to `lint` in CI;
 - when `typescript` is selected in a Vite project, adds [`vite-plugin-checker`](https://vite-plugin-checker.netlify.app/) to the `plugins` of `vite.config.*` (and `devDependencies`), so type errors (`typescript`, or `vueTsc` with `vue`, using the tsconfig that includes `src`) and ESLint errors show in the terminal and browser overlay during `vite` and fail `vite build` (`enableBuild: true` is set explicitly, independent of the plugin's default). An existing `vite-plugin-checker` setup is left unchanged; configs it can't edit get a snippet;
 - when `aliases` is selected, adds the missing [path aliases](#path-aliases) to the tsconfig that includes each src folder (`src`, or the `boundaries` src folders; following `references` of a solution-style `tsconfig.json`, e.g. to `tsconfig.app.json`);
 - does the same for `resolve.alias` in `vite.config.{ts,mts,js,mjs}` (Vite doesn't read tsconfig `paths`), with the aliases pointing to `src`: missing aliases are merged into the config's object or `defineConfig({ ... })` (also when exported through a variable, e.g. `const config = defineConfig({ ... }); export default config`), together with the `node:url` import. Configs it can't edit (e.g. `defineConfig(() => ({ ... }))` or an array `alias`) get a snippet to add manually;
@@ -42,7 +42,8 @@ The CLI replaces the existing lint/format setup of the project with the Uselab s
 - when a TypeScript Vite config imports Node builtins (such as that `node:url` import), adds `@types/node` to `devDependencies` if it is missing (matching the major of `engines.node`, else `^24`) and configures its tsconfig to load the Node types: a tsconfig that only covers the Vite config gets `"node"` added to its `types` (or `"types": ["node"]` when it has none: TypeScript 6 no longer loads `@types/*` packages by default); a tsconfig that also covers `src` hands the Vite config over to a `tsconfig.node.json` with `"types": ["node"]`, so Node types don't leak into browser code. That file is added to the `references` of a solution-style `tsconfig.json` only; a tsconfig with its own files can't reference a `noEmit` project, so type-check it with `tsc -p tsconfig.node.json`. When only a glob (e.g. `*.ts`) includes the Vite config, it warns instead;
 - writes the Copilot hook to `.github/hooks/uselab-linting.json` in the repository root (the closest directory with `.git`), overwriting it;
 - renames configs with `git mv` (a plain rename when git can't move the file, e.g. when it is untracked) and stages the files it created or renamed with `git add` (the ESLint / Prettier config, a new `tsconfig.node.json` and the Copilot hook), so `git status` shows them as added or renamed. `REFACTOR-COMMON-JS.md` is left untracked, and other changes (such as `package.json`) are left unstaged. Files git can't add (e.g. ignored files) are reported;
-- prints the remaining steps: `npm install` when packages were added or removed, and `npm run lint`.
+- offers to run the [lint analysis](#analyze) right away (default: yes). When init added or removed packages, or a required package is missing or too old in `node_modules`, it first offers to run `npm install` (or the `npm install -D ...` command without a `package.json`); when that is declined or fails, the analysis is skipped;
+- otherwise prints the remaining steps: `npm install` when packages were added or removed, and `npm run lint`.
 
 A single tsconfig is enough for linting. The `tsconfig.app.json` / `tsconfig.node.json` split of Vite templates is only needed to type-check app and tooling files with different settings.
 
@@ -62,9 +63,9 @@ It needs `@uselab/linting`, `eslint` and (for formatting) `prettier` installed i
 npx uselab-linting analyze [dir]
 ```
 
-Lints the whole project like the `lint` script (`eslint .` with its cache, without fixing) and prints the rules that report errors or warnings, most relevant first: ordered by the number of errors without an autofix, then warnings without an autofix, then auto-fixable errors, then auto-fixable warnings (suggestions don't count as autofix). Each rule shows its counts (e.g. `12 errors (4 fixable), 3 warnings in 5 files`), the files with problems (most problems first, with their count) and up to 3 code excerpts (`file:line:column  message`, the offending line with one line of context), from different files when possible, preferring problems without an autofix and never showing the same code twice. Parse errors are listed as `(parse error)`.
+Lints the whole project like the `lint` script (`eslint .` with its cache, without fixing) and prints the rules that report errors or warnings, most relevant first: ordered by the number of errors without an autofix, then warnings without an autofix, then auto-fixable errors, then auto-fixable warnings (suggestions don't count as autofix). Each rule shows its counts (e.g. `12 errors (4 fixable), 3 warnings in 5 files`), the files with problems (most problems first, with their count) and up to 2 code excerpts (`file:line:column  message`, the offending line with one line of context), from different files when possible, preferring problems without an autofix and never showing the same code twice. Parse errors are listed as `(parse error)`.
 
-In an interactive terminal it first asks whether to exclude the auto-fixable problems (default: yes). After the report it shows one row per reported rule with an action: use ↑/↓ to move, ←/→ or space to cycle **keep** → **disable** → **ignore with comments**, and enter to confirm (every rule starts at keep); esc continues without changes. Above the rows it explains: _Ignore with comments leaves the existing code unchanged and keeps the rule active for new code._
+In an interactive terminal it first asks whether to exclude the auto-fixable problems (default: yes). After the report it shows one row per reported rule with an action: use ↑/↓ to move, ←/→ or space to cycle **keep** → **disable** → **ignore with comments**, and enter to confirm (every rule starts at keep); esc continues without changes. Above the rows it explains: _Ignore with comments leaves the existing code unchanged and keeps the rule active for new code._ Above the rules is an **Edit ESLint ignore configuration** row, for when files are linted that shouldn't be or files are missed that should be. Press ↑ to reach it; enter on it applies the chosen actions and then asks only for the globs of the `globalIgnores()` entry, prefilled with the current ones: the files to skip (empty lints all files) or, for an opt-in scope, the files to lint, where `!glob` skips files within them (e.g. `src/**, !src/legacy/**`). The globs are relative to the ESLint config's folder, which the prompt mentions when it isn't the analyzed folder. When the config isn't a `@uselab/linting` config or its patterns aren't literals, it only says to change `globalIgnores([...])` by hand.
 
 Disabled rules are turned off in a `// disable-rules` entry of the ESLint config (the file ESLint uses for the project), right before `...configs.prettier` (or at the end of the config array when there is none); on a later run, newly disabled rules are added to that entry:
 
@@ -89,7 +90,7 @@ Ignored rules get an `eslint-disable-next-line` comment above each reported prob
 
 Lines inside multi-line strings and files of other types are skipped and listed.
 
-When rules were disabled or ignored, ESLint runs again, prints the new report and asks again for the remaining rules (disabled and ignored rules drop out; a rule stays only for problems that couldn't get a comment). This repeats until you confirm with every rule on keep, or press esc to continue without changes (ctrl+c cancels). When the report still has problems, it then offers to write it to `LINT-ANALYSIS.md` (not added to git). It exits with 1 when the final report contains errors.
+When rules were disabled or ignored, or the ignores changed, ESLint runs again, prints the new report and asks again for the remaining rules (disabled and ignored rules drop out; a rule stays only for problems that couldn't get a comment). This repeats until you confirm with every rule on keep, or press esc to continue without changes (ctrl+c cancels). When the report still has problems, it then offers to write it to `LINT-ANALYSIS.md` (not added to git); when it reports [project structure](#project-structure-boundaries) problems, the file explains the structure at the end and those rules refer to it. It exits with 1 when the final report contains errors.
 
 ## Usage
 
@@ -102,7 +103,7 @@ import { globalIgnores } from 'eslint/config';
 import { configs } from '@uselab/linting';
 
 export default [
-  globalIgnores(['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.tsbuildinfo']),
+  globalIgnores(['**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo']),
   ...configs.javascript(),
   ...configs.typescript,
   ...configs.vue,
@@ -117,7 +118,7 @@ export default [
 
 ```ts
 export default [
-  globalIgnores(['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.tsbuildinfo']),
+  globalIgnores(['**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo']),
   ...configs.javascript(),
   ...configs.typescript,
   ...configs.react,
@@ -130,7 +131,7 @@ export default [
 
 ```ts
 export default [
-  globalIgnores(['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.tsbuildinfo']),
+  globalIgnores(['**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo']),
   ...configs.javascript(),
   ...configs.typescript, // omit for plain JS
   ...configs.node,
@@ -194,7 +195,7 @@ Blank lines are not counted; comments are not counted except by `vue/max-lines-p
 
 ### Ignores
 
-The global ignores are ESLint's own [`globalIgnores()`](https://eslint.org/docs/latest/use/configure/ignore) (from `eslint/config`), with the full list written out in `eslint.config.*`, so you see everything that is ignored. The VS Code ESLint extension reads them from there, so the editor uses the same scope as `npm run lint`. `init` asks for the scope and writes it here, followed by the defaults `**/dist/**`, `**/node_modules/**`, `**/coverage/**` and `**/*.tsbuildinfo` (also exported as `DEFAULT_IGNORES`).
+The global ignores are ESLint's own [`globalIgnores()`](https://eslint.org/docs/latest/use/configure/ignore) (from `eslint/config`), with the full list written out in `eslint.config.*`, so you see everything that is ignored. The VS Code ESLint extension reads them from there, so the editor uses the same scope as `npm run lint`. `init` asks for the scope and writes it here, followed by the defaults `**/dist/**`, `**/node_modules/**` and `**/*.tsbuildinfo` (also exported as `DEFAULT_IGNORES`). The defaults are added whichever scope you choose (all files, opt-out or opt-in), and `init` mentions them in the scope question. Other generated folders, such as `coverage`, are linted unless you add them as opt-out globs (e.g. `coverage/**`). The `**/coverage/**` default of earlier versions is dropped when `init` or `analyze` rewrites the entry.
 
 ```ts
 // Opt-out: lint everything except legacy code.
@@ -203,25 +204,24 @@ globalIgnores([
   'src/old/**',
   '**/dist/**',
   '**/node_modules/**',
-  '**/coverage/**',
   '**/*.tsbuildinfo',
 ]),
 
-// Opt-in: lint only src and test (plus root config files such as eslint.config.ts).
+// Opt-in: lint only src and test, except src/legacy (plus root config files such as eslint.config.ts).
 globalIgnores([
   '**/*', // ignore everything...
   '!**/*/', // ...but look inside folders, so the patterns below can match
   '!*.{js,mjs,cjs,ts,mts,cts}', // lint root config files (eslint.config.ts, vite.config.ts, ...)
   '!src/**',
   '!test/**',
+  'src/legacy/**', // skip files within the linted globs
   '**/dist/**',
   '**/node_modules/**',
-  '**/coverage/**',
   '**/*.tsbuildinfo',
 ]),
 ```
 
-`'!**/*/'` is required in opt-in mode: ESLint doesn't look inside ignored folders, so without it `!src/**` would never match. Order matters: keep the defaults (`dist`, `coverage`, ...) after your patterns, so `!src/**` doesn't bring back `src/dist`. These patterns only affect ESLint; use `.prettierignore` for Prettier.
+`'!**/*/'` is required in opt-in mode: ESLint doesn't look inside ignored folders, so without it `!src/**` would never match. Order matters: keep the defaults (`dist`, `node_modules`, ...) after your patterns, so `!src/**` doesn't bring back `src/dist`, and put opt-in exclusions such as `src/legacy/**` after the globs they narrow. These patterns only affect ESLint; use `.prettierignore` for Prettier.
 
 `configs.ignores()` of earlier versions no longer exists; `init` replaces it with `globalIgnores([...])`.
 
@@ -322,10 +322,10 @@ Each src folder has its own `app/`, `features/` and `support/` and the rules abo
 
 #### Options
 
-| Option     | Type                 | Default             | Description                                                                                                                          |
-| ---------- | -------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `srcDirs`  | `string[]`           | `['src']`           | The src folders, relative to the directory ESLint runs in (the project root). Every source file in them is checked.                  |
-| `tsconfig` | `string \| string[]` | Detected per folder | tsconfig(s) used to resolve imports such as `@features/cart`. Only needed when the [detection](#which-tsconfig-is-used) picks wrong. |
+| Option     | Type                 | Default             | Description                                                                                                                               |
+| ---------- | -------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `srcDirs`  | `string[]`           | `['src']`           | The src folders, relative to the directory ESLint runs in (the project root). Every source file in them is checked. They can't be nested. |
+| `tsconfig` | `string \| string[]` | Detected per folder | tsconfig(s) used to resolve imports such as `@features/cart`. Only needed when the [detection](#which-tsconfig-is-used) picks wrong.      |
 
 `init` writes both: the detected src folders (only when they differ from `['src']`) and the tsconfig that includes each of them.
 

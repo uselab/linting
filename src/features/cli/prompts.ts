@@ -1,9 +1,10 @@
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import * as clack from '@clack/prompts';
+import { DEFAULT_IGNORES } from '../../support/ignores';
+import { hasNestedSrcDirs, NESTED_SRC_DIRS_MESSAGE } from '../../support/source-tsconfig';
 import { excludeTestSrcDirs } from './detect';
 import {
-  DEFAULT_TEST_FILES,
   type BoundariesAnswers,
   type IgnoresAnswers,
   type IgnoresMode,
@@ -68,7 +69,10 @@ export const validateSrcDirs = (
     return 'Enter at least one folder.';
   }
   const missing = dirs.filter((dir) => !isKind(path.resolve(projectDir, dir), 'directory'));
-  return missing.length > 0 ? missingMessage(missing, 'Folder(s)') : undefined;
+  if (missing.length > 0) {
+    return missingMessage(missing, 'Folder(s)');
+  }
+  return hasNestedSrcDirs(dirs) ? NESTED_SRC_DIRS_MESSAGE : undefined;
 };
 
 /** Validates the tsconfig answer: empty is allowed, else each must be a file in the project. */
@@ -106,13 +110,14 @@ export const splitGlobs = (value: string): string[] => {
 
 const askJavascript = async (
   initial: JavaScriptAnswers | undefined,
+  detectedTestFiles: readonly string[],
 ): Promise<JavaScriptAnswers> => {
   const testFiles = splitGlobs(
     unwrap(
       await clack.text({
         message:
           'Test files: globs of files with relaxed rules (comma separated, empty = no test files)',
-        initialValue: (initial?.testFiles ?? DEFAULT_TEST_FILES).join(', '),
+        initialValue: (initial?.testFiles ?? detectedTestFiles).join(', '),
         defaultValue: '',
       }),
     ),
@@ -157,7 +162,7 @@ const askBoundaries = async (
 };
 
 const IGNORES_OPTIONS: { value: IgnoresMode; label: string; hint: string }[] = [
-  { value: 'all', label: 'All files', hint: 'except dist, node_modules and coverage' },
+  { value: 'all', label: 'All files', hint: 'the whole project' },
   {
     value: 'exclude',
     label: 'All files except some globs (opt-out)',
@@ -172,13 +177,34 @@ const IGNORES_OPTIONS: { value: IgnoresMode; label: string; hint: string }[] = [
 
 const DEFAULT_OPT_IN_GLOBS = ['src/**'];
 
-const validateIgnoreGlobs = (value: string | undefined): string | undefined => {
-  const globs = splitGlobs(value ?? '');
-  if (globs.length === 0) {
-    return 'Enter at least one glob.';
-  }
-  return globs.some((glob) => glob.startsWith('!')) ? "Don't start globs with '!'." : undefined;
-};
+/** The default ignores as short names, e.g. `dist` for `**\/dist/**`. */
+const defaultIgnoreNames = (): string[] =>
+  DEFAULT_IGNORES.map((pattern) => pattern.replace(/^\*\*\//, '').replace(/\/\*\*$/, ''));
+
+/** Added to the lint scope question, as the defaults apply whichever scope is chosen. */
+export const DEFAULT_IGNORES_MESSAGE = `${defaultIgnoreNames().join(', ')} are always ignored`;
+
+/**
+ * Validates the globs: at least one is required. Opt-in globs may start with `!` to skip files
+ * within the linted ones, as long as at least one glob is linted; opt-out globs may not.
+ */
+const validateIgnoreGlobs =
+  (mode: Exclude<IgnoresMode, 'all'>) =>
+  (value: string | undefined): string | undefined => {
+    const globs = splitGlobs(value ?? '');
+    if (globs.length === 0) {
+      return 'Enter at least one glob.';
+    }
+    const skipped = globs.filter((glob) => glob.startsWith('!'));
+    if (mode === 'exclude') {
+      return skipped.length > 0 ? "Don't start globs with '!'." : undefined;
+    }
+    return skipped.length === globs.length
+      ? "Enter at least one glob to lint (without '!')."
+      : undefined;
+  };
+
+const OPT_IN_MESSAGE = "Globs of the files to lint (comma separated; '!glob' skips files in them";
 
 const askIgnoreGlobs = async (
   mode: Exclude<IgnoresMode, 'all'>,
@@ -190,12 +216,10 @@ const askIgnoreGlobs = async (
     unwrap(
       await clack.text({
         message:
-          mode === 'only'
-            ? 'Globs of the files to lint (comma separated)'
-            : 'Globs of the files to skip (comma separated)',
-        placeholder: mode === 'only' ? 'src/**, test/**' : 'legacy/**, src/old/**',
+          mode === 'only' ? `${OPT_IN_MESSAGE})` : 'Globs of the files to skip (comma separated)',
+        placeholder: mode === 'only' ? 'src/**, test/**, !src/legacy/**' : 'legacy/**, src/old/**',
         initialValue: initialGlobs.join(', '),
-        validate: validateIgnoreGlobs,
+        validate: validateIgnoreGlobs(mode),
       }),
     ),
   );
@@ -205,7 +229,7 @@ const askIgnoreGlobs = async (
 const askIgnores = async (initial: IgnoresAnswers | undefined): Promise<IgnoresAnswers> => {
   const mode = unwrap(
     await clack.select<IgnoresMode>({
-      message: 'Which files should ESLint lint?',
+      message: `Which files should ESLint lint? (${DEFAULT_IGNORES_MESSAGE})`,
       options: IGNORES_OPTIONS,
       initialValue: initial?.mode ?? 'all',
     }),
@@ -213,6 +237,42 @@ const askIgnores = async (initial: IgnoresAnswers | undefined): Promise<IgnoresA
   return mode === 'all'
     ? { mode, globs: [] }
     : { mode, globs: await askIgnoreGlobs(mode, initial) };
+};
+
+const validateEditedGlobs =
+  (optIn: boolean) =>
+  (value: string | undefined): string | undefined =>
+    splitGlobs(value ?? '').length === 0 && !optIn
+      ? undefined
+      : validateIgnoreGlobs(optIn ? 'only' : 'exclude')(value);
+
+/**
+ * Asks only for the globs of the current lint scope: the files to lint for an opt-in scope, else
+ * the files to skip, where no globs lints all files. `relativeTo` names the folder the globs are
+ * relative to, when that isn't obvious.
+ */
+export const askScopeGlobs = async (
+  current: IgnoresAnswers,
+  relativeTo?: string,
+): Promise<IgnoresAnswers> => {
+  const optIn = current.mode === 'only';
+  const relative = relativeTo === undefined ? '' : `, relative to ${relativeTo}`;
+  const globs = splitGlobs(
+    unwrap(
+      await clack.text({
+        message: optIn
+          ? `${OPT_IN_MESSAGE}${relative})`
+          : `Globs of the files to skip (comma separated${relative}; empty lints all files)`,
+        placeholder: optIn ? 'src/**, test/**, !src/legacy/**' : 'legacy/**, src/old/**',
+        initialValue: current.globs.join(', '),
+        validate: validateEditedGlobs(optIn),
+      }),
+    ) ?? '',
+  );
+  if (optIn) {
+    return { mode: 'only', globs };
+  }
+  return globs.length === 0 ? { mode: 'all', globs } : { mode: 'exclude', globs };
 };
 
 export type BoundariesDefaults = {
@@ -227,6 +287,8 @@ export type BoundariesDefaults = {
 export type AskOptions = {
   initialPresets: PresetId[];
   boundariesDefaults: BoundariesDefaults;
+  /** Detected test file globs, used when there is no existing `testFiles` option. */
+  detectedTestFiles: readonly string[];
   /** javascript options of an existing config, used as initial values. */
   initialJavascript?: JavaScriptAnswers;
   /** Boundaries options of an existing config, used as initial values. */
@@ -244,6 +306,7 @@ export type AskOptions = {
 export const askAnswers = async ({
   initialPresets,
   boundariesDefaults,
+  detectedTestFiles,
   initialJavascript,
   initialBoundaries,
   initialIgnores,
@@ -264,13 +327,13 @@ export const askAnswers = async ({
     clack.log.warn('Both vue and react are selected. That is unusual, but allowed.');
   }
   const javascript = presets.includes('javascript')
-    ? await askJavascript(initialJavascript)
+    ? await askJavascript(initialJavascript, detectedTestFiles)
     : undefined;
   const boundaries = presets.includes('boundaries')
     ? await askBoundaries(
         boundariesDefaults,
         initialBoundaries,
-        javascript?.testFiles ?? DEFAULT_TEST_FILES,
+        javascript?.testFiles ?? detectedTestFiles,
       )
     : undefined;
   const ignores = ignoresEditable ? await askIgnores(initialIgnores) : undefined;

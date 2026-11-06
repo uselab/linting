@@ -5,6 +5,8 @@ import { type Config } from '../../support/shared';
 import {
   DEFAULT_SRC_DIRS,
   findSourceTsconfigs,
+  hasNestedSrcDirs,
+  NESTED_SRC_DIRS_MESSAGE,
   normalizeSrcDir,
 } from '../../support/source-tsconfig';
 
@@ -135,6 +137,12 @@ const importLocationConfig = (srcDir: string): Config => {
   };
 };
 
+const assertNotNested = (srcDirs: string[]): void => {
+  if (hasNestedSrcDirs(srcDirs)) {
+    throw new Error(NESTED_SRC_DIRS_MESSAGE);
+  }
+};
+
 /**
  * Opt-in project structure preset, guided by the principles of Domain-Driven Design
  * (eslint-plugin-boundaries). Enforces the fixed Uselab app / features / support layout inside
@@ -142,6 +150,7 @@ const importLocationConfig = (srcDir: string): Config => {
  */
 export const boundaries = (options: BoundariesOptions = {}): Config[] => {
   const srcDirs = (options.srcDirs ?? DEFAULT_SRC_DIRS).map(normalizeSrcDir);
+  assertNotNested(srcDirs);
   return [
     {
       name: 'uselab/boundaries',

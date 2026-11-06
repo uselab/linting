@@ -241,16 +241,30 @@ type PresetEntries = { javascript?: UselabEntry; boundaries?: UselabEntry };
 
 const ALL_FILES: IgnoresAnswers = { mode: 'all', globs: [] };
 
-/** Reads opt-in patterns (`'**\/*', '!**\/*\/', '!src/**'`) back to their globs. */
+/** Former defaults, read like the current ones and dropped when the entry is rewritten. */
+const LEGACY_DEFAULT_IGNORES: readonly string[] = ['**/coverage/**'];
+
+const isDefaultIgnore = (pattern: string): boolean =>
+  DEFAULT_IGNORES.includes(pattern) || LEGACY_DEFAULT_IGNORES.includes(pattern);
+
+/**
+ * Reads opt-in patterns (`'**\/*', '!**\/*\/', '!src/**', 'src/legacy/**'`) back to their globs:
+ * the negated patterns are the linted globs, the patterns after them the skipped `!globs`.
+ */
 const readOptIn = (patterns: string[]): IgnoresAnswers | undefined => {
   const rest = patterns.filter(
     (pattern) => !IGNORE_EVERYTHING.includes(pattern) && pattern !== KEEP_TOOLING_FILES,
   );
-  if (!rest.every((pattern) => pattern.startsWith('!'))) {
+  const firstSkipped = rest.findIndex((pattern) => !pattern.startsWith('!'));
+  const linted = firstSkipped === -1 ? rest : rest.slice(0, firstSkipped);
+  const skipped = firstSkipped === -1 ? [] : rest.slice(firstSkipped);
+  if (linted.length === 0 || skipped.some((pattern) => pattern.startsWith('!'))) {
     return undefined;
   }
-  const globs = rest.map((pattern) => pattern.slice(1));
-  return globs.length > 0 ? { mode: 'only', globs } : undefined;
+  return {
+    mode: 'only',
+    globs: [...linted.map((pattern) => pattern.slice(1)), ...skipped.map((glob) => `!${glob}`)],
+  };
 };
 
 /** Maps the scope patterns (without the defaults) to the lint scope. */
@@ -286,7 +300,7 @@ const readGlobalIgnores = (node: ASTNode): IgnoresAnswers | undefined => {
   const patterns = argument ? stringArray(argument) : undefined;
   return patterns === undefined
     ? undefined
-    : readScope(patterns.filter((pattern) => !DEFAULT_IGNORES.includes(pattern)));
+    : readScope(patterns.filter((pattern) => !isDefaultIgnore(pattern)));
 };
 
 const readIgnoresOptions = (entry: IgnoresEntry | undefined) => {
@@ -489,6 +503,23 @@ const updateIgnores = (
 /** Prints the updated config, adding the `globalIgnores` import when the entry was written without one. */
 const printUpdated = (parsed: ParsedConfig, ignoresUpdated: boolean): string =>
   printConfig(parsed, ignoresUpdated && parsed.ignoresLocal === undefined);
+
+/**
+ * Rewrites only the `globalIgnores()` lint scope of an existing `@uselab/linting` ESLint config.
+ * Returns the (possibly unchanged) code, or undefined for other configs or non-literal ignores.
+ */
+export const updateEslintIgnores = (
+  text: string,
+  ignores: IgnoresAnswers,
+): { code: string; updated: boolean } | undefined => {
+  const existing = readEslintConfig(text);
+  const parsed = parseConfig(text);
+  if (!existing?.ignoresEditable || !parsed) {
+    return undefined;
+  }
+  const updated = updateIgnores(parsed, existing, { presets: existing.presets, ignores });
+  return { code: updated ? printUpdated(parsed, true) : text, updated };
+};
 
 /**
  * Updates an existing `@uselab/linting` ESLint config to the selected presets: adds the missing

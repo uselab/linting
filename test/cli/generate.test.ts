@@ -31,12 +31,7 @@ const eslintConfigModule = createRequire(import.meta.url)
   .resolve('eslint/config')
   .replaceAll('\\', '/');
 
-const DEFAULT_LINES = [
-  "    '**/dist/**',",
-  "    '**/node_modules/**',",
-  "    '**/coverage/**',",
-  "    '**/*.tsbuildinfo',",
-];
+const DEFAULT_LINES = ["    '**/dist/**',", "    '**/node_modules/**',", "    '**/*.tsbuildinfo',"];
 
 /** The patterns of the generated `globalIgnores([...])`, one per line, without comments. */
 const ignoresBlock = (config: string): string[] => {

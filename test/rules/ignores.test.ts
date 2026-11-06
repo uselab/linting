@@ -15,14 +15,14 @@ describe('globalIgnores() with DEFAULT_IGNORES', () => {
     'dist/index.js',
     'packages/app/dist/index.js',
     'node_modules/pkg/index.js',
-    'coverage/lcov-report/index.js',
     'tsconfig.app.tsbuildinfo',
   ])('ignores %s by default', async (file) => {
     expect(await isIgnored(config, file)).toBe(true);
   });
 
-  it('does not ignore source files', async () => {
+  it('does not ignore source files or coverage reports', async () => {
     expect(await isIgnored(config, 'src/index.js')).toBe(false);
+    expect(await isIgnored(config, 'coverage/lcov-report/index.js')).toBe(false);
   });
 
   it('adds extra patterns', async () => {
@@ -47,7 +47,7 @@ describe('globalIgnores() with DEFAULT_IGNORES', () => {
       'test/a.test.js',
       'packages/app/src/index.js',
       'src/dist/index.js',
-      'src/coverage/index.js',
+      'src/node_modules/index.js',
     ])('ignores %s', async (file) => {
       expect(await isIgnored(optIn, file)).toBe(true);
     });

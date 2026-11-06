@@ -9,10 +9,15 @@ import {
 
 describe('requiredScripts', () => {
   it('adds format scripts only with the prettier preset', () => {
-    expect(Object.keys(requiredScripts(['javascript']))).toEqual(['lint', 'lint:fix']);
+    expect(Object.keys(requiredScripts(['javascript']))).toEqual([
+      'lint',
+      'lint:fix',
+      'lint:analyze',
+    ]);
     expect(Object.keys(requiredScripts(['javascript', 'prettier']))).toEqual([
       'lint',
       'lint:fix',
+      'lint:analyze',
       'format',
       'format:check',
     ]);

@@ -1,14 +1,16 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { styleText } from 'node:util';
 import * as clack from '@clack/prompts';
 import type { ESLint, Linter } from 'eslint';
+import { DDD_REFERENCE, dddSectionLines, isBoundaryRule } from './ddd-section';
 import { confirm } from './prompts';
 import { applyRuleActions } from './rule-actions';
 import type { RuleChoice } from './rule-actions-prompt';
 
 export const ANALYSIS_REPORT_FILE = 'LINT-ANALYSIS.md';
 export const PARSE_ERROR_RULE = '(parse error)';
-export const MAX_EXAMPLES = 3;
+export const MAX_EXAMPLES = 2;
 const ESLINT_CACHE = 'node_modules/.cache/eslint/';
 const MAX_LINE_LENGTH = 160;
 
@@ -29,7 +31,8 @@ export type Example = {
   lines: { number: number; text: string; offending: boolean }[];
 };
 
-export type FileCount = { file: string; count: number };
+/** A file with problems, with the position of its first problem. */
+export type FileCount = { file: string; count: number; line: number; column: number };
 
 export type RuleSummary = {
   ruleId: string;
@@ -146,7 +149,12 @@ const count = (problems: Problem[], severity: 1 | 2, fixable?: boolean): number 
 /** The files with problems, most problems first, then by path. */
 const fileCounts = (problems: Problem[]): FileCount[] =>
   [...groupBy(problems, ({ file }) => file)]
-    .map(([file, list]) => ({ file, count: list.length }))
+    .map(([file, list]) => ({
+      file,
+      count: list.length,
+      line: list[0]?.line ?? 0,
+      column: list[0]?.column ?? 0,
+    }))
     .sort((a, b) => b.count - a.count || a.file.localeCompare(b.file));
 
 const summarizeRule = (
@@ -244,10 +252,14 @@ const fixHint = (analysis: Analysis): string | undefined => {
 };
 
 const ruleHeading = (rule: RuleSummary): string =>
-  `${rule.ruleId} — ${describeCounts(rule)} in ${plural(rule.files.length, 'file')}`;
+  `${styleText('red', rule.ruleId)} — ${describeCounts(rule)} in ${plural(rule.files.length, 'file')}`;
+
+/** The file, with the position of the problem when it has only one. */
+const fileLocation = ({ file, count: problems, line, column }: FileCount): string =>
+  problems === 1 ? `${file}:${line}:${column}` : file;
 
 const fileList = (rule: RuleSummary): string[] =>
-  rule.files.map(({ file, count: problems }) => `${file} (${problems})`);
+  rule.files.map((entry) => `${fileLocation(entry)} (${entry.count})`);
 
 const location = ({ problem }: Example): string =>
   `${problem.file}:${problem.line}:${problem.column}`;
@@ -259,19 +271,42 @@ const numberedLines = ({ lines }: Example): string[] => {
   );
 };
 
-/** The analysis as plain text for the terminal. */
-export const formatTerminalReport = (analysis: Analysis): string => {
-  const lines = ['ESLint analysis', ...summaryLines(analysis)];
+export const TERMINAL_REPORT_TITLE = 'ESLint analysis';
+
+/** The analysis as plain text for the terminal, without the title. */
+export const formatTerminalReportBody = (analysis: Analysis): string => {
+  const lines = summaryLines(analysis);
   for (const [index, rule] of analysis.rules.entries()) {
     lines.push('', `${index + 1}. ${ruleHeading(rule)}`);
     lines.push(...fileList(rule).map((file) => `   - ${file}`));
     for (const example of rule.examples) {
       lines.push('', `   ${location(example)}  ${example.problem.message}`);
-      lines.push(...numberedLines(example).map((line) => `   ${line}`));
+      lines.push(...numberedLines(example).map((line) => styleText('dim', `   ${line}`)));
     }
   }
   const hint = fixHint(analysis);
-  return [...lines, ...(hint ? ['', hint] : [])].join('\n');
+  const footer = [
+    ...(analysis.rules.length > 0 ? summaryLines(analysis) : []),
+    ...(hint ? [hint] : []),
+  ];
+  return [...lines, ...(footer.length > 0 ? ['', ...footer] : [])].join('\n');
+};
+
+/** The analysis as plain text for the terminal. */
+export const formatTerminalReport = (analysis: Analysis): string =>
+  `${TERMINAL_REPORT_TITLE}\n${formatTerminalReportBody(analysis)}`;
+
+/**
+ * Prints the report: interactively in a bordered box (numbered after the first run), so each
+ * report stands out as one block when scrolling back; otherwise as plain text.
+ */
+const printReport = (analysis: Analysis, interactive: boolean, run: number): void => {
+  if (!interactive) {
+    process.stdout.write(`\n${formatTerminalReport(analysis)}\n\n`);
+    return;
+  }
+  const title = run > 1 ? `${TERMINAL_REPORT_TITLE} (${run})` : TERMINAL_REPORT_TITLE;
+  clack.box(formatTerminalReportBody(analysis), title, { width: 'auto', contentPadding: 2 });
 };
 
 const fenceLanguage = (file: string): string => path.extname(file).slice(1);
@@ -284,9 +319,10 @@ export const formatMarkdownReport = (analysis: Analysis): string => {
       '',
       `## ${index + 1}. \`${rule.ruleId}\``,
       '',
+      ...(isBoundaryRule(rule.ruleId) ? [DDD_REFERENCE, ''] : []),
       describeCounts(rule) + ` in ${plural(rule.files.length, 'file')}:`,
       '',
-      ...rule.files.map(({ file, count: problems }) => `- \`${file}\` (${problems})`),
+      ...rule.files.map((entry) => `- \`${fileLocation(entry)}\` (${entry.count})`),
     );
     for (const example of rule.examples) {
       lines.push('', `\`${location(example)}\` ${example.problem.message}`, '');
@@ -294,7 +330,10 @@ export const formatMarkdownReport = (analysis: Analysis): string => {
     }
   }
   const hint = fixHint(analysis);
-  return `${[...lines, ...(hint ? ['', hint] : [])].join('\n')}\n`;
+  const ddd = analysis.rules.some(({ ruleId }) => isBoundaryRule(ruleId))
+    ? ['', ...dddSectionLines()]
+    : [];
+  return `${[...lines, ...(hint ? ['', hint] : []), ...ddd].join('\n')}\n`;
 };
 
 /** Reads (and caches) the source lines of the project files. */
@@ -349,7 +388,7 @@ const offerMarkdownReport = async (projectDir: string, analysis: Analysis): Prom
   if (analysis.rules.length === 0) {
     return;
   }
-  if (await confirm(`Write the report to ${ANALYSIS_REPORT_FILE}?`, false)) {
+  if (await confirm(`Write the report to ${ANALYSIS_REPORT_FILE}?`)) {
     writeFileSync(path.join(projectDir, ANALYSIS_REPORT_FILE), formatMarkdownReport(analysis));
     clack.log.success(`Wrote ${ANALYSIS_REPORT_FILE}.`);
   }
@@ -363,27 +402,40 @@ const ruleChoices = ({ rules }: Analysis): RuleChoice[] =>
       hint: `${describeCounts(rule)} in ${plural(rule.files.length, 'file')}`,
     }));
 
+const isMissingDirectory = (projectDir: string): boolean => {
+  if (existsSync(projectDir) && statSync(projectDir).isDirectory()) {
+    return false;
+  }
+  process.stderr.write(`Target directory does not exist: ${projectDir}\n`);
+  process.exitCode = 1;
+  return true;
+};
+
 /**
  * The `analyze` command: lints the project and prints the rules with problems, ordered by
  * relevance, with code excerpts. Interactively, it offers to disable rules or ignore their problems
  * with comments (linting again) and to write the report to markdown. Exits with 1 when the (final)
- * report contains errors.
+ * report contains errors. `intro: false` skips the intro, when run at the end of init.
  */
-export const runAnalyze = async (projectDir: string, interactive: boolean): Promise<void> => {
-  if (!existsSync(projectDir) || !statSync(projectDir).isDirectory()) {
-    process.stderr.write(`Target directory does not exist: ${projectDir}\n`);
-    process.exitCode = 1;
+export const runAnalyze = async (
+  projectDir: string,
+  interactive: boolean,
+  { intro = true }: { intro?: boolean } = {},
+): Promise<void> => {
+  if (isMissingDirectory(projectDir)) {
     return;
   }
-  if (interactive) {
+  if (interactive && intro) {
     clack.intro('@uselab/linting analyze');
   }
   const excludeFixable = interactive && (await confirm('Exclude auto-fixable errors/warnings?'));
+  let run = 0;
   const analyze = async () => {
     const results = await lintWithSpinner(projectDir, interactive);
     const problems = collectProblems(projectDir, results);
     const analysis = analyzeProblems(problems, fileSourceReader(projectDir), excludeFixable);
-    process.stdout.write(`\n${formatTerminalReport(analysis)}\n\n`);
+    run += 1;
+    printReport(analysis, interactive, run);
     const reported = excludeFixable ? problems.filter(({ fixable }) => !fixable) : problems;
     return { analysis, reported };
   };

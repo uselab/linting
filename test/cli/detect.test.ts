@@ -2,7 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { detectPresets, detectSrcDirs, excludeTestSrcDirs } from '../../src/features/cli/detect';
+import {
+  detectPresets,
+  detectSrcDirs,
+  detectTestFiles,
+  excludeTestSrcDirs,
+} from '../../src/features/cli/detect';
 
 let dir = '';
 
@@ -100,6 +105,20 @@ describe('detectPresets', () => {
     expect(detectPresets(dir, {}, undefined).reasons.typescript).toBeUndefined();
     writeFileSync(path.join(dir, 'src', 'app', 'main.ts'), '');
     expect(detectPresets(dir, {}, undefined).reasons.typescript).toContain('.ts');
+  });
+});
+
+describe('detectTestFiles', () => {
+  it('falls back to test/**', () => {
+    expect(detectTestFiles(dir)).toEqual(['test/**']);
+  });
+
+  it('finds test, tests, tst and tsts folders in the project root', () => {
+    for (const folder of ['tests', 'tst', 'tsts', 'testing', 'src/test']) {
+      mkdirSync(path.join(dir, folder), { recursive: true });
+    }
+    writeFileSync(path.join(dir, 'test'), '');
+    expect(detectTestFiles(dir)).toEqual(['tests/**', 'tst/**', 'tsts/**']);
   });
 });
 

@@ -75,7 +75,14 @@ const scopePatterns = (answers: IgnoresAnswers | undefined): string[] => {
   if (answers.mode === 'exclude') {
     return answers.globs;
   }
-  return [...IGNORE_EVERYTHING, KEEP_TOOLING_FILES, ...answers.globs.map((glob) => `!${glob}`)];
+  const skipped = answers.globs.filter((glob) => glob.startsWith('!'));
+  const linted = answers.globs.filter((glob) => !glob.startsWith('!'));
+  return [
+    ...IGNORE_EVERYTHING,
+    KEEP_TOOLING_FILES,
+    ...linted.map((glob) => `!${glob}`),
+    ...skipped.map((glob) => glob.slice(1)),
+  ];
 };
 
 /**

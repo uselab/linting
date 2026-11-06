@@ -5,6 +5,5 @@
 export const DEFAULT_IGNORES: readonly string[] = [
   '**/dist/**',
   '**/node_modules/**',
-  '**/coverage/**',
   '**/*.tsbuildinfo',
 ];

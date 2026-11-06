@@ -32,6 +32,12 @@ describe('validateSrcDirs', () => {
       'Folder(s) not found in the project: scr, tsconfig.app.json',
     );
   });
+
+  it('rejects nested folders', () => {
+    expect(validateSrcDirs(dir, 'packages/web/src, packages/web')).toBe(
+      'Boundaries cannot be nested',
+    );
+  });
 });
 
 describe('validateTsconfigs', () => {

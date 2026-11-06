@@ -34,18 +34,32 @@ export const cycleAction = (action: RuleAction, step: 1 | -1): RuleAction =>
 export const IGNORE_INTRODUCTION =
   'Ignore with comments leaves the existing code unchanged and keeps the rule active for new code.';
 
+export const EDIT_IGNORES_LABEL = 'Edit ESLint ignore configuration';
+
+export const EDIT_IGNORES_EXPLANATION =
+  "Files linted that shouldn't be, or missed that should be? Edit that here.";
+
 const INSTRUCTIONS =
   '↑/↓ to move, ←/→ or space to change (keep → disable → ignore with comments), enter to confirm, esc to continue without changes';
 
-/** The rule under the cursor and the action per rule. */
+/**
+ * The row under the cursor and the action per rule. Row 0 is "Edit ESLint ignore configuration",
+ * above the rules; rule `i` is on row `i + 1`.
+ */
 export type RuleActionsState = { cursor: number; actions: RuleAction[] };
 
-/** Handles a cursor key: up/down moves, left/right/space changes the action. */
+/** The chosen action per rule and whether to edit the ignore configuration afterwards. */
+export type RuleActionsResult = { actions: RuleAction[]; editIgnores: boolean };
+
+/** Whether the cursor is on the "Edit ESLint ignore configuration" row. */
+export const onEditIgnores = (state: RuleActionsState): boolean => state.cursor === 0;
+
+/** Handles a cursor key: up/down moves, left/right/space changes the action of a rule. */
 export const moveRuleActions = (
   state: RuleActionsState,
   key: string | undefined,
 ): RuleActionsState => {
-  const count = state.actions.length;
+  const count = state.actions.length + 1;
   if (key === 'up' || key === 'down') {
     return { ...state, cursor: (state.cursor + (key === 'up' ? count - 1 : 1)) % count };
   }
@@ -54,7 +68,7 @@ export const moveRuleActions = (
     return {
       ...state,
       actions: state.actions.map((action, index) =>
-        index === state.cursor ? cycleAction(action, step) : action,
+        index === state.cursor - 1 ? cycleAction(action, step) : action,
       ),
     };
   }
@@ -68,11 +82,19 @@ const row = (choice: RuleChoice, action: RuleAction, active: boolean): string =>
   return `${pointer} ${label}  ${rule} ${styleText('dim', `(${choice.hint})`)}`;
 };
 
-const summary = (choices: RuleChoice[], actions: RuleAction[]): string => {
+const editIgnoresRow = (active: boolean): string =>
+  `${active ? styleText('cyan', '❯') : ' '} ${active ? EDIT_IGNORES_LABEL : styleText('dim', EDIT_IGNORES_LABEL)}`;
+
+const SEPARATOR = '─'.repeat(40);
+
+const summary = (choices: RuleChoice[], state: RuleActionsState): string => {
   const chosen = choices.flatMap(({ ruleId }, index) => {
-    const action = actions[index] ?? 'keep';
+    const action = state.actions[index] ?? 'keep';
     return action === 'keep' ? [] : [`${ruleId}: ${ACTION_LABELS[action]}`];
   });
+  if (onEditIgnores(state)) {
+    chosen.push('edit ESLint ignore configuration');
+  }
   return styleText('dim', chosen.length > 0 ? chosen.join(', ') : 'none');
 };
 
@@ -88,7 +110,7 @@ type RenderOptions = {
 
 const finalResult = ({ choices, state, promptState, escaped }: RenderOptions): string => {
   if (promptState === 'submit') {
-    return summary(choices, state.actions);
+    return summary(choices, state);
   }
   return styleText('dim', escaped === true ? 'no changes' : 'cancelled');
 };
@@ -102,17 +124,28 @@ export const renderRuleActions = (options: RenderOptions): string => {
     return `${header}${bar}  ${finalResult(options)}`;
   }
   const side = styleText('cyan', S_BAR);
-  const intro = `${side}  ${styleText('dim', IGNORE_INTRODUCTION)}\n${side}\n`;
+  const editIgnores = [
+    editIgnoresRow(onEditIgnores(state)),
+    `  ${styleText('dim', EDIT_IGNORES_EXPLANATION)}`,
+    '',
+    styleText('dim', SEPARATOR),
+    '',
+    styleText('dim', IGNORE_INTRODUCTION),
+    '',
+  ]
+    .map((line) => (line === '' ? `${side}\n` : `${side}  ${line}\n`))
+    .join('');
   const rows = limitOptions({
     output,
     options: choices.map((choice, index) => ({ choice, index })),
-    cursor: state.cursor,
+    cursor: Math.max(state.cursor - 1, 0),
     maxItems: 15,
-    rowPadding: header.split('\n').length + intro.split('\n').length + 1,
-    style: ({ choice, index }, active) => row(choice, state.actions[index] ?? 'keep', active),
+    rowPadding: header.split('\n').length + editIgnores.split('\n').length + 1,
+    style: ({ choice, index }) =>
+      row(choice, state.actions[index] ?? 'keep', index === state.cursor - 1),
   });
   const body = rows.map((line) => `${side}  ${line}`).join('\n');
-  return `${header}${intro}${body}\n${side}  ${styleText('dim', INSTRUCTIONS)}\n${styleText('cyan', S_BAR_END)}\n`;
+  return `${header}${editIgnores}${body}\n${side}  ${styleText('dim', INSTRUCTIONS)}\n${styleText('cyan', S_BAR_END)}\n`;
 };
 
 type RuleActionsOptions = {
@@ -123,16 +156,17 @@ type RuleActionsOptions = {
 };
 
 /**
- * Shows one row per rule; ←/→ or space cycles its action and enter submits the actions. Esc
- * continues without changes (every rule on keep); ctrl+c cancels.
+ * Shows one row per rule; ←/→ or space cycles its action and enter submits the actions. Enter on
+ * the row above the rules, "Edit ESLint ignore configuration", also asks to edit the ignores. Esc continues without
+ * changes (every rule on keep); ctrl+c cancels.
  */
 export const promptRuleActions = async ({
   message,
   choices,
   input,
   output = process.stdout,
-}: RuleActionsOptions): Promise<RuleAction[] | symbol> => {
-  let state: RuleActionsState = { cursor: 0, actions: choices.map((): RuleAction => 'keep') };
+}: RuleActionsOptions): Promise<RuleActionsResult | symbol> => {
+  let state: RuleActionsState = { cursor: 1, actions: choices.map((): RuleAction => 'keep') };
   let escaped = false;
   const prompt = new Prompt<RuleAction[]>(
     {
@@ -154,13 +188,26 @@ export const promptRuleActions = async ({
     escaped = info.name === 'escape';
   });
   const result = await prompt.prompt();
-  return escaped ? choices.map((): RuleAction => 'keep') : (result ?? state.actions);
+  if (escaped) {
+    return { actions: choices.map((): RuleAction => 'keep'), editIgnores: false };
+  }
+  if (typeof result === 'symbol') {
+    return result;
+  }
+  return { actions: result ?? state.actions, editIgnores: onEditIgnores(state) };
 };
 
-/** Asks what to do with each rule (default: keep; esc keeps all). */
-export const askRuleActions = async (choices: RuleChoice[]): Promise<Map<string, RuleAction>> => {
-  const actions = unwrap(
+/**
+ * Asks what to do with each rule (default: keep; esc keeps all) and whether to edit the ignores.
+ */
+export const askRuleActions = async (
+  choices: RuleChoice[],
+): Promise<{ actions: Map<string, RuleAction>; editIgnores: boolean }> => {
+  const { actions, editIgnores } = unwrap(
     await promptRuleActions({ message: 'What to do with the rules?', choices }),
   );
-  return new Map(choices.map(({ ruleId }, index) => [ruleId, actions[index] ?? 'keep']));
+  return {
+    actions: new Map(choices.map(({ ruleId }, index) => [ruleId, actions[index] ?? 'keep'])),
+    editIgnores,
+  };
 };

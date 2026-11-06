@@ -52,6 +52,7 @@ export const requiredScripts = (
 ): Record<string, string> => ({
   lint: `eslint . ${ESLINT_CACHE}`,
   'lint:fix': `eslint . --fix ${ESLINT_CACHE}`,
+  'lint:analyze': 'uselab-linting analyze',
   ...(presets.includes('prettier')
     ? { format: 'prettier --write .', 'format:check': 'prettier --check .' }
     : {}),

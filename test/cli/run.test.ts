@@ -15,16 +15,45 @@ type MockAnswers = {
   /** Answer of the lint scope globs prompt; its prefilled value when undefined. */
   ignoreGlobs?: string;
   warnings: string[];
+  /** Messages of the select prompts, in order. */
+  selects: string[];
   confirm: boolean;
   confirmDefaults: boolean[];
+  /** Answer of the "run the lint analysis" prompt. */
+  analyze: boolean;
+  /** Answer of the "install the dependencies first" prompt. */
+  install: boolean;
+  /** Messages of the analyze and install prompts, in order. */
+  analyzePrompts: string[];
 };
 
 const answers = vi.hoisted((): MockAnswers => ({
   presets: [],
   texts: [],
   warnings: [],
+  selects: [],
   confirm: true,
   confirmDefaults: [],
+  analyze: false,
+  install: true,
+  analyzePrompts: [],
+}));
+
+const mocks = vi.hoisted(() => ({
+  runInstall: vi.fn<(projectDir: string, command: string) => boolean>(() => true),
+  runAnalyze: vi.fn<
+    (projectDir: string, interactive: boolean, options?: { intro?: boolean }) => Promise<void>
+  >(async () => {}),
+}));
+
+vi.mock('../../src/features/cli/install', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  runInstall: mocks.runInstall,
+}));
+
+vi.mock('../../src/features/cli/analyze', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  runAnalyze: mocks.runAnalyze,
 }));
 
 vi.mock('@clack/prompts', () => {
@@ -43,8 +72,10 @@ vi.mock('@clack/prompts', () => {
     },
     isCancel: () => false,
     multiselect: async () => answers.presets,
-    select: async ({ initialValue }: { initialValue?: string }) =>
-      answers.ignoresMode ?? initialValue,
+    select: async ({ message, initialValue }: { message: string; initialValue?: string }) => {
+      answers.selects.push(message);
+      return answers.ignoresMode ?? initialValue;
+    },
     text: async ({ message, initialValue }: { message: string; initialValue?: string }) => {
       if (message.startsWith('Test files')) {
         return answers.testFiles ?? initialValue ?? '';
@@ -54,7 +85,15 @@ vi.mock('@clack/prompts', () => {
       }
       return answers.texts.shift() ?? '';
     },
-    confirm: async ({ initialValue }: { initialValue: boolean }) => {
+    confirm: async ({ message, initialValue }: { message: string; initialValue: boolean }) => {
+      if (message.startsWith('Run the lint analysis')) {
+        answers.analyzePrompts.push(message);
+        return answers.analyze;
+      }
+      if (message.startsWith('The analysis needs')) {
+        answers.analyzePrompts.push(message);
+        return answers.install;
+      }
       answers.confirmDefaults.push(initialValue);
       return answers.confirm;
     },
@@ -109,10 +148,16 @@ const failedWith = async (argv: string[]): Promise<string> => {
 
 beforeEach(() => {
   answers.confirmDefaults = [];
+  answers.analyze = false;
+  answers.install = true;
+  answers.analyzePrompts = [];
+  mocks.runInstall.mockReset().mockReturnValue(true);
+  mocks.runAnalyze.mockReset();
   answers.testFiles = undefined;
   answers.ignoresMode = undefined;
   answers.ignoreGlobs = undefined;
   answers.warnings = [];
+  answers.selects = [];
   dir = mkdtempSync(path.join(tmpdir(), 'uselab-run-'));
   writeFileSync(
     path.join(dir, 'package.json'),
@@ -190,6 +235,7 @@ describe('run init', () => {
     expect(Object.keys(packageJson.scripts)).toEqual([
       'lint',
       'lint:fix',
+      'lint:analyze',
       'format',
       'format:check',
       'typecheck',
@@ -395,7 +441,14 @@ describe('run init', () => {
     await commitAndInit(dir);
 
     const { scripts } = JSON.parse(read('package.json'));
-    expect(Object.keys(scripts)).toEqual(['dev', 'lint', 'lint:fix', 'format', 'format:check']);
+    expect(Object.keys(scripts)).toEqual([
+      'dev',
+      'lint',
+      'lint:fix',
+      'lint:analyze',
+      'format',
+      'format:check',
+    ]);
     expect(scripts.lint).toBe('eslint . --cache --cache-location node_modules/.cache/eslint/');
   });
 
@@ -630,6 +683,96 @@ describe('run init', () => {
   });
 });
 
+describe('run init analyze offer', () => {
+  const ownVersion = (): string =>
+    JSON.parse(readFileSync(path.join(import.meta.dirname, '../../package.json'), 'utf8')).version;
+
+  /** A module project with the javascript preset's dependencies declared and installed. */
+  const writeInstalledProject = (): void => {
+    const version = ownVersion();
+    const devDependencies = { '@uselab/linting': `^${version}`, eslint: '^10.4.0', jiti: '^2.2.0' };
+    writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({ name: 'app', type: 'module', devDependencies }, undefined, 2),
+    );
+    const installed = { '@uselab/linting': version, eslint: '10.4.0', jiti: '2.2.0' };
+    for (const [name, packageVersion] of Object.entries(installed)) {
+      mkdirSync(path.join(dir, 'node_modules', name), { recursive: true });
+      writeFileSync(
+        path.join(dir, 'node_modules', name, 'package.json'),
+        JSON.stringify({ name, version: packageVersion }),
+      );
+    }
+  };
+
+  beforeEach(() => {
+    answers.presets = ['javascript'];
+    answers.confirm = false;
+  });
+
+  it('offers the analysis with Yes as default and does nothing when declined', async () => {
+    await commitAndInit(dir);
+
+    expect(answers.analyzePrompts).toEqual(['Run the lint analysis (uselab-linting analyze) now?']);
+    expect(mocks.runInstall).not.toHaveBeenCalled();
+    expect(mocks.runAnalyze).not.toHaveBeenCalled();
+  });
+
+  it('runs the analysis without installing when the dependencies are installed', async () => {
+    writeInstalledProject();
+    answers.analyze = true;
+
+    await commitAndInit(dir);
+
+    expect(answers.analyzePrompts).toHaveLength(1);
+    expect(mocks.runInstall).not.toHaveBeenCalled();
+    expect(mocks.runAnalyze).toHaveBeenCalledWith(dir, true, { intro: false });
+  });
+
+  it('offers npm install first when init changed the dependencies', async () => {
+    answers.analyze = true;
+
+    await commitAndInit(dir);
+
+    expect(answers.analyzePrompts[1]).toBe(
+      'The analysis needs the dependencies installed. Run npm install first?',
+    );
+    expect(mocks.runInstall).toHaveBeenCalledWith(dir, 'npm install');
+    expect(mocks.runAnalyze).toHaveBeenCalledWith(dir, true, { intro: false });
+  });
+
+  it('offers npm install first when a declared dependency is not installed', async () => {
+    writeInstalledProject();
+    rmSync(path.join(dir, 'node_modules', 'jiti'), { recursive: true, force: true });
+    answers.analyze = true;
+
+    await commitAndInit(dir);
+
+    expect(mocks.runInstall).toHaveBeenCalledWith(dir, 'npm install');
+    expect(mocks.runAnalyze).toHaveBeenCalled();
+  });
+
+  it('skips the analysis when the install is declined', async () => {
+    answers.analyze = true;
+    answers.install = false;
+
+    await commitAndInit(dir);
+
+    expect(mocks.runInstall).not.toHaveBeenCalled();
+    expect(mocks.runAnalyze).not.toHaveBeenCalled();
+  });
+
+  it('skips the analysis when the install fails', async () => {
+    answers.analyze = true;
+    mocks.runInstall.mockReturnValue(false);
+
+    await commitAndInit(dir);
+
+    expect(mocks.runInstall).toHaveBeenCalled();
+    expect(mocks.runAnalyze).not.toHaveBeenCalled();
+  });
+});
+
 describe('run init lint scope', () => {
   const CONFIG = 'eslint.config.mts';
 
@@ -658,6 +801,13 @@ describe('run init lint scope', () => {
     await initWithScope('all');
     expect(read(CONFIG)).toContain("  globalIgnores([\n    '**/dist/**',");
     expect(scope()).toEqual({ mode: 'all', globs: [] });
+  });
+
+  it('mentions the default ignores in the scope question', async () => {
+    await initWithScope('all');
+    expect(answers.selects).toContain(
+      'Which files should ESLint lint? (dist, node_modules, *.tsbuildinfo are always ignored)',
+    );
   });
 
   it('leaves non-literal configs.ignores() unchanged without asking', async () => {

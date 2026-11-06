@@ -25,6 +25,9 @@ vi.mock('@clack/prompts', () => {
     intro: noop,
     outro: noop,
     note: noop,
+    box: (message: string, title: string) => {
+      process.stdout.write(`${title}\n${message}\n`);
+    },
     cancel: noop,
     isCancel: () => false,
     log: { info: noop, success: noop, warn: noop },
@@ -41,7 +44,10 @@ vi.mock('../../src/features/cli/rule-actions-prompt', () => ({
     prompts.messages.push('What to do with the rules?');
     prompts.choices.push(choices.map(({ ruleId, hint }) => `${ruleId}: ${hint}`));
     const actions = prompts.rounds.shift() ?? prompts.actions;
-    return new Map(choices.map(({ ruleId }) => [ruleId, actions[ruleId] ?? 'keep']));
+    return {
+      actions: new Map(choices.map(({ ruleId }) => [ruleId, actions[ruleId] ?? 'keep'])),
+      editIgnores: false,
+    };
   },
 }));
 
@@ -56,6 +62,7 @@ const {
   runAnalyze,
   summarizeRules,
 } = await import('../../src/features/cli/analyze');
+const { DDD_INTRO, DDD_TABLE } = await import('../../src/features/cli/ddd-section');
 
 type Problem = Parameters<typeof codeExcerpt>[0];
 
@@ -105,7 +112,7 @@ describe('codeExcerpt', () => {
 });
 
 describe('pickExamples', () => {
-  it('picks up to 3 examples from different files first', () => {
+  it('picks up to 2 examples from different files first', () => {
     const examples = pickExamples(
       [
         problem({ file: 'a.ts', line: 2 }),
@@ -118,7 +125,6 @@ describe('pickExamples', () => {
     expect(examples.map(({ problem: { file, line } }) => `${file}:${line}`)).toEqual([
       'a.ts:2',
       'c.ts:2',
-      'a.ts:4',
     ]);
   });
 
@@ -216,19 +222,44 @@ describe('reports', () => {
     const report = formatTerminalReport(analysis);
     expect(report).toContain('2 errors (1 fixable), 1 warning in 2 rules.');
     expect(report).toContain(
-      '1. no-var — 2 errors (1 fixable) in 2 files\n   - a.ts (1)\n   - c.ts (1)\n',
+      '1. no-var — 2 errors (1 fixable) in 2 files\n   - a.ts:2:1 (1)\n   - c.ts:2:1 (1)\n',
     );
     expect(report).toContain(
       '   a.ts:2:1  Unexpected var.\n     1 | const a = 1;\n   > 2 | var x = 1;',
     );
     expect(report).toContain(`2. ${PARSE_ERROR_RULE} — 1 warning in 1 file`);
-    expect(report).toContain('1 problem can be fixed automatically with `npm run lint:fix`.');
+    expect(
+      report.endsWith(
+        '\n\n2 errors (1 fixable), 1 warning in 2 rules.\n' +
+          '1 problem can be fixed automatically with `npm run lint:fix`.',
+      ),
+    ).toBe(true);
+  });
+
+  it('repeats the summary with the excluded auto-fixable problems at the bottom', () => {
+    const report = formatTerminalReport(
+      analyzeProblems(
+        [problem({ ruleId: 'no-var' }), problem({ ruleId: 'no-var', fixable: true })],
+        readSource,
+        true,
+      ),
+    );
+    expect(report).toMatch(
+      /\n\n1 error in 1 rule\.\nAuto-fixable problems excluded: 1\.\n1 problem can be fixed automatically with `npm run lint:fix`\.$/u,
+    );
+  });
+
+  it('writes the summary only at the top of the markdown', () => {
+    const report = formatMarkdownReport(analysis);
+    expect(report.split('in 2 rules.')).toHaveLength(2);
   });
 
   it('writes markdown with code fences', () => {
     const report = formatMarkdownReport(analysis);
     expect(report).toContain('## 1. `no-var`');
-    expect(report).toContain('2 errors (1 fixable) in 2 files:\n\n- `a.ts` (1)\n- `c.ts` (1)\n');
+    expect(report).toContain(
+      '2 errors (1 fixable) in 2 files:\n\n- `a.ts:2:1` (1)\n- `c.ts:2:1` (1)\n',
+    );
     expect(report).toContain(
       '`a.ts:2:1` Unexpected var.\n\n```ts\n  1 | const a = 1;\n> 2 | var x = 1;',
     );
@@ -236,6 +267,54 @@ describe('reports', () => {
 
   it('reports no problems', () => {
     expect(formatTerminalReport({ rules: [] })).toBe('ESLint analysis\nNo problems found.');
+  });
+
+  it('shows the position only for files with a single problem', () => {
+    const report = formatMarkdownReport(
+      analyzeProblems(
+        [
+          problem({ ruleId: 'no-var', file: 'a.ts', line: 2 }),
+          problem({ ruleId: 'no-var', file: 'a.ts', line: 3 }),
+          problem({ ruleId: 'no-var', file: 'c.ts', line: 2, column: 5 }),
+        ],
+        readSource,
+      ),
+    );
+    expect(report).toContain('- `a.ts` (2)\n- `c.ts:2:5` (1)\n');
+  });
+
+  it('explains the project structure when there are boundary problems', () => {
+    const report = formatMarkdownReport(
+      analyzeProblems(
+        [
+          problem({ ruleId: 'boundaries/dependencies', file: 'a.ts' }),
+          problem({ ruleId: 'no-var', file: 'c.ts' }),
+        ],
+        readSource,
+      ),
+    );
+    expect(
+      report.endsWith(`\n\n## Project structure (DDD)\n\n${DDD_INTRO}\n\n${DDD_TABLE}\n`),
+    ).toBe(true);
+    expect(report).toContain(
+      '## 1. `boundaries/dependencies`\n\nSee [Project structure (DDD)](#project-structure-ddd).\n\n1 error in 1 file:',
+    );
+    expect(report).toContain('## 2. `no-var`\n\n1 error in 1 file:');
+  });
+
+  it('leaves out the project structure without boundary problems', () => {
+    const report = formatMarkdownReport(analysis);
+    expect(report).not.toContain('Project structure (DDD)');
+  });
+
+  it('copies the project structure from the README', () => {
+    const readme = readFileSync(
+      path.join(import.meta.dirname, '../../README.md'),
+      'utf8',
+    ).replaceAll('\r\n', '\n');
+    const section = readme.slice(readme.indexOf('### Project structure (boundaries)'));
+    expect(section).toContain(`\n\n${DDD_INTRO}\n\n`);
+    expect(section).toContain(`\n\n${DDD_TABLE}\n\n`);
   });
 });
 
@@ -295,7 +374,7 @@ describe('runAnalyze', () => {
     expect(prompts.messages).toEqual([
       'Exclude auto-fixable errors/warnings? [Y]',
       'What to do with the rules?',
-      `Write the report to ${ANALYSIS_REPORT_FILE}? [N]`,
+      `Write the report to ${ANALYSIS_REPORT_FILE}? [Y]`,
     ]);
     expect(prompts.choices).toEqual([['no-console: 2 warnings in 2 files']]);
     expect(output).not.toContain('no-var');
@@ -320,7 +399,7 @@ describe('runAnalyze', () => {
     ]);
     expect(output.match(/ESLint analysis/gu)).toHaveLength(2);
     expect(output).toMatch(
-      /ESLint analysis\nNo problems found\.\nAuto-fixable problems excluded: 1\.\n/u,
+      /ESLint analysis \(2\)\nNo problems found\.\nAuto-fixable problems excluded: 1\.\n/u,
     );
     expect(existsSync(path.join(dir, ANALYSIS_REPORT_FILE))).toBe(false);
   });
@@ -335,7 +414,7 @@ describe('runAnalyze', () => {
       ['no-console: 2 warnings in 2 files', 'no-var: 1 error (1 fixable) in 1 file'],
       ['no-var: 1 error (1 fixable) in 1 file'],
     ]);
-    expect(prompts.messages.at(-1)).toBe(`Write the report to ${ANALYSIS_REPORT_FILE}? [N]`);
+    expect(prompts.messages.at(-1)).toBe(`Write the report to ${ANALYSIS_REPORT_FILE}? [Y]`);
     expect(output.split('ESLint analysis').at(-1)).not.toContain('no-console');
     expect(process.exitCode).toBe(1);
   });
@@ -374,7 +453,9 @@ describe('runAnalyze', () => {
       ['no-var'],
     ]);
     expect(output.match(/ESLint analysis/gu)).toHaveLength(3);
-    expect(prompts.messages.at(-1)).toBe(`Write the report to ${ANALYSIS_REPORT_FILE}? [N]`);
+    expect(output).toContain('ESLint analysis (2)\n');
+    expect(output).toContain('ESLint analysis (3)\n');
+    expect(prompts.messages.at(-1)).toBe(`Write the report to ${ANALYSIS_REPORT_FILE}? [Y]`);
     expect(process.exitCode).toBe(1);
   });
 

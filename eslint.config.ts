@@ -2,7 +2,7 @@ import { globalIgnores } from 'eslint/config';
 import { configs } from '@uselab/linting';
 
 export default [
-  globalIgnores(['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.tsbuildinfo']),
+  globalIgnores(['**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo']),
   ...configs.javascript(),
   ...configs.typescript,
   ...configs.node,

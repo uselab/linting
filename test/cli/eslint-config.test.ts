@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { readEslintConfig, updateEslintConfig } from '../../src/features/cli/eslint-config';
+import {
+  readEslintConfig,
+  updateEslintConfig,
+  updateEslintIgnores,
+} from '../../src/features/cli/eslint-config';
 import {
   DEFAULT_TEST_FILES,
   generateEslintConfig,
@@ -7,7 +11,7 @@ import {
   type PresetId,
 } from '../../src/features/cli/generate';
 
-const DEFAULTS = "'**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.tsbuildinfo'";
+const DEFAULTS = "'**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo'";
 
 const CUSTOM_CONFIG = [
   "import { globalIgnores } from 'eslint/config';",
@@ -288,6 +292,10 @@ describe('globalIgnores()', () => {
       `globalIgnores(['**/*', '!**/*/', '!*.{js,mjs,cjs,ts,mts,cts}', '!src/**', '!test/**', ${DEFAULTS}]),`,
       { mode: 'only', globs: ['src/**', 'test/**'] },
     ],
+    [
+      `globalIgnores(['**/*', '!**/*/', '!*.{js,mjs,cjs,ts,mts,cts}', '!src/**', 'src/legacy/**', ${DEFAULTS}]),`,
+      { mode: 'only', globs: ['src/**', '!src/legacy/**'] },
+    ],
   ])('reads %s', (entry, ignores) => {
     expect(readEslintConfig(withIgnores(entry))).toMatchObject({
       ignores,
@@ -312,6 +320,7 @@ describe('globalIgnores()', () => {
   it.each([
     'globalIgnores(patterns),',
     `globalIgnores(['**/*', '!**/*/', 'legacy/**', '!src/**', ${DEFAULTS}]),`,
+    `globalIgnores(['**/*', '!**/*/', '!src/**', 'src/legacy/**', '!src/legacy/keep/**', ${DEFAULTS}]),`,
     `globalIgnores(['**/*', '!**/*/', ${DEFAULTS}]),`,
   ])('marks %s as not editable and leaves it unchanged', (entry) => {
     const text = withIgnores(entry);
@@ -329,6 +338,10 @@ describe('globalIgnores()', () => {
     [
       { mode: 'only', globs: ['src/**'] },
       `globalIgnores(['**/*', '!**/*/', '!*.{js,mjs,cjs,ts,mts,cts}', '!src/**', ${DEFAULTS}]),`,
+    ],
+    [
+      { mode: 'only', globs: ['src/**', 'test/**', '!src/legacy/**'] },
+      `globalIgnores(['**/*', '!**/*/', '!*.{js,mjs,cjs,ts,mts,cts}', '!src/**', '!test/**', 'src/legacy/**', ${DEFAULTS}]),`,
     ],
   ])('rewrites the lint scope %o', (ignores, expected) => {
     const update = updateEslintConfig(CUSTOM_CONFIG, { ...PRESETS, ...BOUNDARIES, ignores });
@@ -377,6 +390,28 @@ describe('globalIgnores()', () => {
     expect(update?.code).toBe(text);
   });
 
+  it.each<[string, IgnoresAnswers]>([
+    [`'legacy/**', ${DEFAULTS}, '**/coverage/**'`, { mode: 'exclude', globs: ['legacy/**'] }],
+    [
+      `'**/*', '!**/*/', '!*.{js,mjs,cjs,ts,mts,cts}', '!src/**', '**/dist/**', '**/coverage/**', '**/node_modules/**'`,
+      { mode: 'only', globs: ['src/**'] },
+    ],
+  ])('reads the former **/coverage/** default as a default in %s', (patterns, ignores) => {
+    const text = withIgnores(`globalIgnores([${patterns}]),`);
+    expect(readEslintConfig(text)).toMatchObject({ ignores, ignoresEditable: true });
+    expect(updateEslintConfig(text, { ...PRESETS, ...BOUNDARIES, ignores })?.code).toBe(text);
+  });
+
+  it('drops the former **/coverage/** default when rewriting the scope', () => {
+    const text = withIgnores(`globalIgnores(['legacy/**', '**/coverage/**', ${DEFAULTS}]),`);
+    const update = updateEslintConfig(text, {
+      ...PRESETS,
+      ...BOUNDARIES,
+      ignores: { mode: 'exclude', globs: ['other/**'] },
+    });
+    expect(spreads(update?.code)[0]).toBe(`globalIgnores(['other/**', ${DEFAULTS}]),`);
+  });
+
   it('inserts globalIgnores() and its import at the top when it is missing', () => {
     const text = CUSTOM_CONFIG.replace(`  ${DEFAULT_ENTRY}\n`, '').replace(
       "import { globalIgnores } from 'eslint/config';\n",
@@ -393,6 +428,48 @@ describe('globalIgnores()', () => {
     expect(
       updateEslintConfig(text, { ...PRESETS, ...BOUNDARIES, ignores: { mode: 'all', globs: [] } }),
     ).toMatchObject({ ignoresUpdated: false, code: text });
+  });
+});
+
+describe('updateEslintIgnores', () => {
+  const DEFAULT_ENTRY = `globalIgnores([${DEFAULTS}]),`;
+
+  it('rewrites only the lint scope, keeping the presets and other entries', () => {
+    const ignores: IgnoresAnswers = { mode: 'exclude', globs: ['legacy/**'] };
+    const update = updateEslintIgnores(CUSTOM_CONFIG, ignores);
+    expect(update?.updated).toBe(true);
+    expect(spreads(update?.code)).toEqual([
+      `globalIgnores(['legacy/**', ${DEFAULTS}]),`,
+      '...uselab.javascript(),',
+      "...uselab.boundaries({ tsconfig: 'tsconfig.app.json' }),",
+      '...uselab.prettier,',
+    ]);
+    expect(update?.code).toContain('...local,');
+    expect(readEslintConfig(update?.code ?? '')?.ignores).toEqual(ignores);
+  });
+
+  it('inserts globalIgnores() and its import when it is missing', () => {
+    const text = CUSTOM_CONFIG.replace(`  ${DEFAULT_ENTRY}\n`, '').replace(
+      "import { globalIgnores } from 'eslint/config';\n",
+      '',
+    );
+    const update = updateEslintIgnores(text, { mode: 'only', globs: ['src/**'] });
+    expect(update?.updated).toBe(true);
+    expect(update?.code).toContain("import { globalIgnores } from 'eslint/config';");
+  });
+
+  it('leaves an unchanged scope alone', () => {
+    expect(updateEslintIgnores(CUSTOM_CONFIG, { mode: 'all', globs: [] })).toEqual({
+      code: CUSTOM_CONFIG,
+      updated: false,
+    });
+  });
+
+  it('returns undefined for non-literal ignores and other configs', () => {
+    const ignores: IgnoresAnswers = { mode: 'exclude', globs: ['legacy/**'] };
+    const text = CUSTOM_CONFIG.replace(DEFAULT_ENTRY, 'globalIgnores(patterns),');
+    expect(updateEslintIgnores(text, ignores)).toBeUndefined();
+    expect(updateEslintIgnores('export default [];\n', ignores)).toBeUndefined();
   });
 });
 

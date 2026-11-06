@@ -1,9 +1,12 @@
 import { PassThrough } from 'node:stream';
 import { stripVTControlCharacters } from 'node:util';
 import { isCancel } from '@clack/core';
+import { S_BAR } from '@clack/prompts';
 import { describe, expect, it } from 'vitest';
 import {
   cycleAction,
+  EDIT_IGNORES_EXPLANATION,
+  EDIT_IGNORES_LABEL,
   IGNORE_INTRODUCTION,
   moveRuleActions,
   promptRuleActions,
@@ -25,15 +28,22 @@ describe('cycleAction', () => {
 });
 
 describe('moveRuleActions', () => {
-  const initial = { cursor: 0, actions: ['keep', 'keep'] } as const;
+  const initial = { cursor: 1, actions: ['keep', 'keep'] } as const;
 
-  it('moves the cursor around', () => {
-    expect(moveRuleActions({ ...initial, actions: [...initial.actions] }, 'up').cursor).toBe(1);
-    expect(moveRuleActions({ ...initial, actions: [...initial.actions] }, 'down').cursor).toBe(1);
+  it('moves the cursor around, including the edit ignores row above the rules', () => {
+    expect(moveRuleActions({ ...initial, actions: [...initial.actions] }, 'up').cursor).toBe(0);
+    expect(moveRuleActions({ ...initial, actions: [...initial.actions] }, 'down').cursor).toBe(2);
+    expect(moveRuleActions({ cursor: 0, actions: [...initial.actions] }, 'up').cursor).toBe(2);
+    expect(moveRuleActions({ cursor: 2, actions: [...initial.actions] }, 'down').cursor).toBe(0);
+  });
+
+  it('changes no action on the edit ignores row', () => {
+    const state = { cursor: 0, actions: [...initial.actions] };
+    expect(moveRuleActions(state, 'space').actions).toEqual(['keep', 'keep']);
   });
 
   it('changes the action of the rule under the cursor', () => {
-    const state = { cursor: 1, actions: [...initial.actions] };
+    const state = { cursor: 2, actions: [...initial.actions] };
     expect(moveRuleActions(state, 'space').actions).toEqual(['keep', 'disable']);
     expect(moveRuleActions(state, 'right').actions).toEqual(['keep', 'disable']);
     expect(moveRuleActions(state, 'left').actions).toEqual(['keep', 'ignore']);
@@ -48,7 +58,7 @@ describe('renderRuleActions', () => {
       renderRuleActions({
         message: 'What?',
         choices,
-        state: { cursor: 1, actions: ['ignore', 'keep'] },
+        state: { cursor: 2, actions: ['ignore', 'keep'] },
         promptState: 'active',
         output,
       }),
@@ -56,6 +66,37 @@ describe('renderRuleActions', () => {
     expect(text).toContain('  ignore with comments  rule-a (2 errors in 1 file)');
     expect(text).toContain('❯ keep                  rule-b (1 warning in 1 file)');
     expect(text.indexOf(IGNORE_INTRODUCTION)).toBeLessThan(text.indexOf('rule-a'));
+    expect(text).toContain(
+      `${S_BAR}    ${EDIT_IGNORES_LABEL}\n${S_BAR}    ${EDIT_IGNORES_EXPLANATION}\n${S_BAR}\n${S_BAR}  ───`,
+    );
+    expect(text.indexOf(EDIT_IGNORES_LABEL)).toBeLessThan(text.indexOf(IGNORE_INTRODUCTION));
+  });
+
+  it('points at the edit ignores row', () => {
+    const text = stripVTControlCharacters(
+      renderRuleActions({
+        message: 'What?',
+        choices,
+        state: { cursor: 0, actions: ['keep', 'keep'] },
+        promptState: 'active',
+        output,
+      }),
+    );
+    expect(text).toContain(`❯ ${EDIT_IGNORES_LABEL}`);
+    expect(text).not.toMatch(/❯ keep/u);
+  });
+
+  it('summarizes editing the ignore configuration', () => {
+    const text = stripVTControlCharacters(
+      renderRuleActions({
+        message: 'What?',
+        choices,
+        state: { cursor: 0, actions: ['disable', 'keep'] },
+        promptState: 'submit',
+        output,
+      }),
+    );
+    expect(text).toContain('rule-a: disable, edit ESLint ignore configuration');
   });
 
   it('summarizes the chosen actions', () => {
@@ -99,14 +140,22 @@ describe('promptRuleActions', () => {
     for (const key of ['\u001B[C', '\u001B[B', ' ', ' ', '\r']) {
       input.write(key);
     }
-    expect(await result).toEqual(['disable', 'ignore']);
+    expect(await result).toEqual({ actions: ['disable', 'ignore'], editIgnores: false });
+  });
+
+  it('asks to edit the ignores on enter on the row above the rules', async () => {
+    const { input, result } = start();
+    for (const key of [' ', '\u001B[A', '\r']) {
+      input.write(key);
+    }
+    expect(await result).toEqual({ actions: ['disable', 'keep'], editIgnores: true });
   });
 
   it('continues without changes on esc', async () => {
     const { input, result } = start();
     input.write(' ');
     input.emit('keypress', undefined, { name: 'escape', sequence: '\u001B' });
-    expect(await result).toEqual(['keep', 'keep']);
+    expect(await result).toEqual({ actions: ['keep', 'keep'], editIgnores: false });
   });
 
   it('cancels on ctrl+c', async () => {

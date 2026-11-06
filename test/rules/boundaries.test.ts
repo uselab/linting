@@ -114,6 +114,13 @@ describe('srcDirs', () => {
     const report = await lint({ srcDirs: ['./src/'] });
     expect(boundaryLines(report, 'src/support/format.ts')).toEqual([1]);
   });
+
+  it('rejects nested src dirs', () => {
+    expect(() => configs.boundaries({ srcDirs: ['src', './src/features/x/src/'] })).toThrow(
+      'Boundaries cannot be nested',
+    );
+    expect(() => configs.boundaries({ srcDirs: ['web/src', 'web/src-admin'] })).not.toThrow();
+  });
 });
 
 describe('file location', () => {
