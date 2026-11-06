@@ -56,6 +56,41 @@ A single tsconfig is enough for linting. The `tsconfig.app.json` / `tsconfig.nod
 
 It needs `@uselab/linting`, `eslint` and (for formatting) `prettier` installed in the project; in Copilot in the cloud, install the dependencies in `copilot-setup-steps.yml`.
 
+### Analyze
+
+```sh
+npx uselab-linting analyze [dir]
+```
+
+Lints the whole project like the `lint` script (`eslint .` with its cache, without fixing) and prints the rules that report errors or warnings, most relevant first: ordered by the number of errors without an autofix, then warnings without an autofix, then auto-fixable errors, then auto-fixable warnings (suggestions don't count as autofix). Each rule shows its counts (e.g. `12 errors (4 fixable), 3 warnings in 5 files`), the files with problems (most problems first, with their count) and up to 3 code excerpts (`file:line:column  message`, the offending line with one line of context), from different files when possible, preferring problems without an autofix and never showing the same code twice. Parse errors are listed as `(parse error)`.
+
+In an interactive terminal it first asks whether to exclude the auto-fixable problems (default: yes). After the report it shows one row per reported rule with an action: use ↑/↓ to move, ←/→ or space to cycle **keep** → **disable** → **ignore with comments**, and enter to confirm (every rule starts at keep); esc continues without changes. Above the rows it explains: _Ignore with comments leaves the existing code unchanged and keeps the rule active for new code._
+
+Disabled rules are turned off in a `// disable-rules` entry of the ESLint config (the file ESLint uses for the project), right before `...configs.prettier` (or at the end of the config array when there is none); on a later run, newly disabled rules are added to that entry:
+
+```ts
+  // disable-rules
+  {
+    rules: {
+      'vue/no-setup-props-reactivity-loss': 'off',
+    },
+  },
+  ...configs.prettier,
+```
+
+Configs it can't edit (not an `export default [...]` / `defineConfig([...])` array) get a snippet to add manually.
+
+Ignored rules get an `eslint-disable-next-line` comment above each reported problem (only the reported ones, so auto-fixable problems stay when they were excluded). Rules with problems on the same line share one comment, and an existing `eslint-disable-next-line` comment above the line is extended. The comment matches the code:
+
+- JS/TS: `// eslint-disable-next-line rule-a, rule-b`
+- JSX children (`.jsx`/`.tsx`, Vue `lang="tsx"`): `{/* eslint-disable-next-line rule */}`
+- Vue `<template>`: `<!-- eslint-disable-next-line rule -->`; Vue `<script>`: `//`
+- First line, which may hold file-level problems: `/* eslint-disable rule */` before it and `/* eslint-enable rule */` after it (Vue: `<!-- eslint-disable rule -->` at the top)
+
+Lines inside multi-line strings and files of other types are skipped and listed.
+
+When rules were disabled or ignored, ESLint runs again, prints the new report and asks again for the remaining rules (disabled and ignored rules drop out; a rule stays only for problems that couldn't get a comment). This repeats until you confirm with every rule on keep, or press esc to continue without changes (ctrl+c cancels). When the report still has problems, it then offers to write it to `LINT-ANALYSIS.md` (not added to git). It exits with 1 when the final report contains errors.
+
 ## Usage
 
 Spread the presets you need into `eslint.config.ts` (or `.js` / `.mjs`), after the [global ignores](#ignores). **`configs.prettier` must be last.**

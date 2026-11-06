@@ -69,8 +69,10 @@ import {
 import { typecheckScript, updateViteChecker } from './typecheck';
 import { findViteConfig, viteConfigNeedsNodeTypes } from './vite';
 import { updateSourceTsconfigs, updateViteConfig } from './aliases';
+import { runAnalyze } from './analyze';
 
 export const USAGE = `Usage: uselab-linting init [dir]
+       uselab-linting analyze [dir]
        uselab-linting copilot-hook
 
 Sets up @uselab/linting in a project. Detects the framework to preselect presets, replaces any
@@ -78,6 +80,9 @@ existing lint/format tooling and applies the setup without further questions. Th
 be inside a git repository without uncommitted changes.
 
   dir            Target project directory (default: current directory)
+  analyze        Lints the project and lists the rules with errors/warnings by relevance, with
+                 code examples; offers to disable rules or ignore them with comments, and to
+                 write LINT-ANALYSIS.md
   copilot-hook   GitHub Copilot postToolUse hook: formats and lint-fixes the edited files
                  (JSON payload on stdin) and reports the remaining errors to the agent`;
 
@@ -545,6 +550,10 @@ export const run = async (argv: string[]): Promise<void> => {
   }
   if (command === 'init') {
     await runInit(dir);
+    return;
+  }
+  if (command === 'analyze') {
+    await runAnalyze(path.resolve(dir ?? process.cwd()), isInteractive());
     return;
   }
   fail(USAGE);

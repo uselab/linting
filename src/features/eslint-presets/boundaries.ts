@@ -97,7 +97,7 @@ const policiesFor = (srcDirs: string[]): Record<string, unknown>[] => [
   disallow(
     'support',
     'feature',
-    'support/ must not import from features/. Move shared code to support/ instead.',
+    'support/ must not import from features/. Move the imported code into support/, or move the importing code into the feature or app/.',
   ),
   disallow('support', 'app', 'support/ must not import from app/. Keep support isolated.'),
   disallow(LAYOUT_TYPES, 'outside', OUTSIDE_IMPORT_MESSAGE),
