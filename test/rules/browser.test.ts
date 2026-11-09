@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { configs, type Config } from '../../src/app';
-import { lintRule } from '../helpers';
+import { lintRule, lintSnippet } from '../helpers';
 
-const config = [...configs.javascript(), ...configs.browser];
+const config = [...configs.javascript(), ...configs.browser()];
 
 describe('classList mutation (no-restricted-syntax)', () => {
   const rule = 'no-restricted-syntax';
@@ -40,11 +40,11 @@ describe('classList mutation (no-restricted-syntax)', () => {
   const orders: [string, Config[]][] = [
     [
       'browser before react',
-      [...configs.javascript(), ...configs.typescript, ...configs.browser, ...configs.react],
+      [...configs.javascript(), ...configs.typescript, ...configs.browser(), ...configs.react],
     ],
     [
       'browser after react',
-      [...configs.javascript(), ...configs.typescript, ...configs.react, ...configs.browser],
+      [...configs.javascript(), ...configs.typescript, ...configs.react, ...configs.browser()],
     ],
   ];
 
@@ -74,7 +74,7 @@ describe('no-restricted-properties', () => {
         ...configs.javascript(),
         ...configs.typescript,
         ...configs.vue,
-        ...configs.browser,
+        ...configs.browser(),
       ];
       expect(await lintRule(full, rule)(file, code)).toHaveLength(1);
     },
@@ -90,5 +90,37 @@ describe('browser globals', () => {
   it('defines browser globals', async () => {
     const code = 'export const width = window.innerWidth + document.body.clientWidth;';
     expect(await lintRule(config, 'no-undef')('src/size.js', code)).toEqual([]);
+  });
+});
+
+describe('browser({ files }) + node({ ignores })', () => {
+  const globs = ['web/**'];
+  const scoped = [
+    ...configs.javascript(),
+    ...configs.browser({ files: globs }),
+    ...configs.node({ ignores: globs }),
+  ];
+
+  it('gives the browser files browser globals, not Node ones', async () => {
+    const lint = lintRule(scoped, 'no-undef');
+    expect(await lint('web/size.js', 'export const width = window.innerWidth;')).toEqual([]);
+    expect(await lint('web/env.js', 'export const env = process.env;')).toHaveLength(1);
+  });
+
+  it('gives the other files Node globals, not browser ones', async () => {
+    const lint = lintRule(scoped, 'no-undef');
+    expect(await lint('server/env.js', 'export const env = process.env;')).toEqual([]);
+    expect(await lint('server/size.js', 'export const width = window.innerWidth;')).toHaveLength(1);
+  });
+
+  it('applies the UI enforcement rules to the browser files only', async () => {
+    const code = "document.body.setAttribute('a', 'b');\ndocument.body.classList.add('a');";
+    expect(await lintSnippet(scoped, 'web/dom.js', code)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ ruleId: 'no-restricted-properties' }),
+        expect.objectContaining({ ruleId: 'no-restricted-syntax' }),
+      ]),
+    );
+    expect(await lintRule(scoped, 'no-restricted-properties')('src/dom.js', code)).toEqual([]);
   });
 });

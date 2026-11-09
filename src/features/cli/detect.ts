@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_TEST_FILES, PRESET_ORDER, type PresetId } from './generate';
+import { DEFAULT_TEST_FILES, PRESET_ORDER, type PresetId, type ProjectType } from './generate';
 
 export type DetectablePackageJson = {
   bin?: unknown;
@@ -9,9 +9,13 @@ export type DetectablePackageJson = {
 };
 
 export type Detection = {
+  /** Detected presets, without `browser` / `node`: those follow from the project type. */
   presets: PresetId[];
   /** Why each preset was selected, in preset order. */
   reasons: Partial<Record<PresetId, string>>;
+  projectType: ProjectType;
+  /** Why the project type was detected. */
+  projectTypeReason: string;
 };
 
 const VUE_PACKAGES = ['vue', 'nuxt'];
@@ -180,7 +184,7 @@ const browserReason = ({ projectDir, declared }: Signals): string | undefined =>
   dependencyReason(firstOf(declared, BROWSER_PACKAGES)) ??
   (existsSync(path.join(projectDir, 'index.html')) ? 'index.html found' : undefined);
 
-const nodeReason = (signals: Signals, isBrowser: boolean): string | undefined => {
+const nodeReason = (signals: Signals): string => {
   const server =
     firstOf(signals.declared, NODE_PACKAGES) ??
     signals.declared.find((name) => NODE_SCOPES.some((scope) => name.startsWith(scope)));
@@ -190,10 +194,10 @@ const nodeReason = (signals: Signals, isBrowser: boolean): string | undefined =>
   if (signals.packageJson?.bin !== undefined) {
     return 'package.json has a "bin" field';
   }
-  return isBrowser ? undefined : 'no browser framework found';
+  return 'no browser framework found';
 };
 
-/** Preselects presets based on the project's dependencies and files. */
+/** Preselects presets and the project type based on the project's dependencies and files. */
 export const detectPresets = (
   projectDir: string,
   packageJson: DetectablePackageJson | undefined,
@@ -207,8 +211,6 @@ export const detectPresets = (
     typescript: typescriptReason(signals),
     vue: dependencyReason(firstOf(declared, VUE_PACKAGES)),
     react: dependencyReason(firstOf(declared, REACT_PACKAGES)),
-    browser,
-    node: nodeReason(signals, browser !== undefined),
     aliases: dependencyReason(firstOf(declared, ALIAS_PACKAGES)),
     boundaries: 'always',
     prettier: prettierReason(projectDir),
@@ -217,5 +219,34 @@ export const detectPresets = (
   return {
     presets,
     reasons: Object.fromEntries(presets.map((preset) => [preset, found[preset]])),
+    projectType: browser === undefined ? 'node' : 'browser',
+    projectTypeReason: browser ?? nodeReason(signals),
   };
+};
+
+/**
+ * Default browser globs of a browser project: `<dir>/**` for every folder named `src` that isn't
+ * inside another `src` folder or a test location (skipping dependencies, build output and dot
+ * directories). Falls back to `['src/**']`.
+ */
+export const detectBrowserFiles = (projectDir: string, testFiles: readonly string[]): string[] => {
+  const found: string[] = [];
+  const queue = [projectDir];
+  for (let directory = queue.shift(); directory !== undefined; directory = queue.shift()) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isDirectory() && isScannedDirectory(entry.name)) {
+        const child = path.join(directory, entry.name);
+        if (entry.name === 'src') {
+          found.push(path.relative(projectDir, child).split(path.sep).join('/'));
+        } else {
+          queue.push(child);
+        }
+      }
+    }
+  }
+  const globs = testFiles.map((glob) => glob.replace(/^\.\//, ''));
+  const kept = found
+    .filter((srcDir) => !globs.some((glob) => path.posix.matchesGlob(`${srcDir}/file`, glob)))
+    .sort();
+  return kept.length > 0 ? kept.map((srcDir) => `${srcDir}/**`) : ['src/**'];
 };

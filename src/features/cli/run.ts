@@ -34,7 +34,8 @@ import {
   type PackageJson,
   type Requirement,
 } from './dependencies';
-import { detectPresets, detectSrcDirs, detectTestFiles, type Detection } from './detect';
+import { detectPresets } from './detect';
+import { askPresets, type ExistingEslintConfig } from './init-prompts';
 import { checkGit } from './git';
 import { type TrackedFiles, trackFiles } from './tracked-files';
 import {
@@ -47,14 +48,13 @@ import {
   eslintConfigFile,
   generateEslintConfig,
   generatePrettierConfig,
-  orderPresets,
   PRETTIER_CONFIG_FILES,
   prettierConfigFile,
   SHARED_PRETTIER_CONFIG,
   type InitAnswers,
   type PresetId,
 } from './generate';
-import { askAnswers, confirm } from './prompts';
+import { confirm } from './prompts';
 import { addScripts, checkScripts, findStaleScripts, requiredScripts } from './scripts';
 import {
   checkImplicitAny,
@@ -142,8 +142,6 @@ const updateModuleType = async (
   return readPackageJson(projectDir);
 };
 
-type ExistingEslintConfig = { file: string; config: ExistingConfig };
-
 /** Finds an ESLint config that already uses `@uselab/linting`, to preselect its presets. */
 const findExistingEslintConfig = (projectDir: string): ExistingEslintConfig | undefined => {
   for (const file of ESLINT_CONFIGS) {
@@ -158,21 +156,11 @@ const findExistingEslintConfig = (projectDir: string): ExistingEslintConfig | un
   return undefined;
 };
 
-/** Shows why the presets were preselected. */
-const noteDetection = (
-  reasons: Partial<Record<PresetId, string>>,
-  existing: ExistingEslintConfig | undefined,
-): void => {
-  const lines = Object.entries(reasons).map(([preset, reason]) => `${preset}: ${reason ?? ''}`);
-  if (existing) {
-    lines.push('', `Also preselected the presets of ${existing.file}.`);
-  }
-  clack.note(lines.join('\n'), 'Detected');
-};
-
 const EDITABLE_PRESETS: { preset: PresetId; editable: keyof ExistingConfig }[] = [
   { preset: 'javascript', editable: 'javascriptEditable' },
   { preset: 'boundaries', editable: 'boundariesEditable' },
+  { preset: 'browser', editable: 'browserEditable' },
+  { preset: 'node', editable: 'nodeEditable' },
 ];
 
 /** Warns about options of an updated config that couldn't be rewritten or were dropped. */
@@ -218,6 +206,7 @@ const updateExistingEslintConfig = (
     ...update.removed.map((preset) => `- ${preset}`),
     ...(update.javascriptUpdated ? ['~ javascript()'] : []),
     ...(update.boundariesUpdated ? ['~ boundaries options'] : []),
+    ...update.globalsUpdated.map((preset) => `~ ${preset}()`),
     ...(update.ignoresMigrated ? ['~ configs.ignores() → globalIgnores()'] : []),
     ...(update.ignoresUpdated && !update.ignoresMigrated ? ['~ globalIgnores()'] : []),
   ];
@@ -426,28 +415,6 @@ const isDirectory = (dir: string): boolean => existsSync(dir) && statSync(dir).i
 const fail = (message: string): void => {
   process.stderr.write(`${message}\n`);
   process.exitCode = 1;
-};
-
-/** Asks for the presets, preselecting the detected ones and those of an existing config. */
-const askPresets = async (
-  projectDir: string,
-  detection: Detection,
-  existing: ExistingEslintConfig | undefined,
-): Promise<InitAnswers> => {
-  noteDetection(detection.reasons, existing);
-  return askAnswers({
-    initialPresets: orderPresets([...detection.presets, ...(existing?.config.presets ?? [])]),
-    boundariesDefaults: {
-      projectDir,
-      srcDirs: detectSrcDirs(projectDir),
-      tsconfigsFor: (srcDirs) => findSourceTsconfigs(projectDir, srcDirs).map(({ file }) => file),
-    },
-    detectedTestFiles: detectTestFiles(projectDir),
-    initialJavascript: existing?.config.javascript,
-    initialBoundaries: existing?.config.boundaries,
-    initialIgnores: existing?.config.ignores,
-    ignoresEditable: existing?.config.ignoresEditable ?? true,
-  });
 };
 
 const installStep = (

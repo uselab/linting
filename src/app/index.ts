@@ -19,7 +19,7 @@ import { templateStructurePlugin } from '../support/eslint-plugins/template-stru
  *   ...configs.javascript(),
  *   ...configs.typescript,
  *   ...configs.vue,
- *   ...configs.browser,
+ *   ...configs.browser(), // or browser({ files: ['src/**'] }) + node({ ignores: ['src/**'] })
  *   ...configs.aliases, // only when the bundler resolves the path aliases (e.g. Vite)
  *   ...configs.prettier, // always last
  * ];
@@ -46,3 +46,5 @@ export { isDevMode } from '../support/env';
 export type { Config } from '../support/shared';
 export { type BoundariesOptions } from '../features/eslint-presets/boundaries';
 export { type JavaScriptOptions } from '../features/eslint-presets/javascript';
+export { type BrowserOptions } from '../features/eslint-presets/browser';
+export { type NodeOptions } from '../features/eslint-presets/node';

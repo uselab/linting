@@ -25,7 +25,13 @@ describe('imported rule sets', () => {
   });
 
   it('globals: node preset defines Node globals', async () => {
-    const resolved = await configForFile([...configs.javascript(), ...configs.node], 'src/a.js');
+    const resolved = await configForFile([...configs.javascript(), ...configs.node()], 'src/a.js');
     expect(resolved.languageOptions?.globals).toHaveProperty('process');
+  });
+
+  it('globals: node({ ignores }) skips the ignored files', async () => {
+    const config = [...configs.javascript(), ...configs.node({ ignores: ['src/**'] })];
+    const resolved = await configForFile(config, 'src/a.js');
+    expect(resolved.languageOptions?.globals ?? {}).not.toHaveProperty('process');
   });
 });

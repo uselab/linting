@@ -14,6 +14,12 @@ type MockAnswers = {
   ignoresMode?: string;
   /** Answer of the lint scope globs prompt; its prefilled value when undefined. */
   ignoreGlobs?: string;
+  /** Answer of the project type prompt; its preselected value when undefined. */
+  projectType?: string;
+  /** Answer of the browser files prompt; its prefilled value when undefined. */
+  browserFiles?: string;
+  /** Initial values of the project type and browser files prompts. */
+  environmentDefaults: (string | undefined)[];
   warnings: string[];
   /** Messages of the select prompts, in order. */
   selects: string[];
@@ -30,6 +36,7 @@ type MockAnswers = {
 const answers = vi.hoisted((): MockAnswers => ({
   presets: [],
   texts: [],
+  environmentDefaults: [],
   warnings: [],
   selects: [],
   confirm: true,
@@ -73,17 +80,27 @@ vi.mock('@clack/prompts', () => {
     isCancel: () => false,
     multiselect: async () => answers.presets,
     select: async ({ message, initialValue }: { message: string; initialValue?: string }) => {
+      if (message.startsWith('Is this a browser')) {
+        answers.environmentDefaults.push(initialValue);
+        return answers.projectType ?? initialValue;
+      }
       answers.selects.push(message);
       return answers.ignoresMode ?? initialValue;
     },
     text: async ({ message, initialValue }: { message: string; initialValue?: string }) => {
-      if (message.startsWith('Test files')) {
-        return answers.testFiles ?? initialValue ?? '';
+      const prefilled: [string, () => string | undefined][] = [
+        ['Browser files', () => answers.browserFiles],
+        ['Test files', () => answers.testFiles],
+        ['Globs of', () => answers.ignoreGlobs],
+      ];
+      const match = prefilled.find(([prefix]) => message.startsWith(prefix));
+      if (match === undefined) {
+        return answers.texts.shift() ?? '';
       }
-      if (message.startsWith('Globs of')) {
-        return answers.ignoreGlobs ?? initialValue ?? '';
+      if (match[0] === 'Browser files') {
+        answers.environmentDefaults.push(initialValue);
       }
-      return answers.texts.shift() ?? '';
+      return match[1]() ?? initialValue ?? '';
     },
     confirm: async ({ message, initialValue }: { message: string; initialValue: boolean }) => {
       if (message.startsWith('Run the lint analysis')) {
@@ -156,6 +173,9 @@ beforeEach(() => {
   answers.testFiles = undefined;
   answers.ignoresMode = undefined;
   answers.ignoreGlobs = undefined;
+  answers.projectType = undefined;
+  answers.browserFiles = undefined;
+  answers.environmentDefaults = [];
   answers.warnings = [];
   answers.selects = [];
   dir = mkdtempSync(path.join(tmpdir(), 'uselab-run-'));
@@ -815,7 +835,12 @@ describe('run init lint scope', () => {
       "import { configs } from '@uselab/linting';",
       "const legacy = ['legacy/**'];",
       '',
-      'export default [...configs.ignores(legacy), ...configs.javascript()];',
+      'export default [',
+      '  ...configs.ignores(legacy),',
+      '  ...configs.javascript(),',
+      "  ...configs.browser({ files: ['src/**'] }),",
+      "  ...configs.node({ ignores: ['src/**'] }),",
+      '];',
       '',
     ].join('\n');
     rmSync(path.join(dir, 'eslint.config.js'));
@@ -825,5 +850,78 @@ describe('run init lint scope', () => {
 
     expect(read(CONFIG)).toBe(text);
     expect(answers.warnings.some((warning) => warning.includes('globalIgnores(['))).toBe(true);
+  });
+});
+
+describe('run init environment', () => {
+  const CONFIG = 'eslint.config.mts';
+
+  const initEnvironment = async (): Promise<string> => {
+    answers.presets = ['javascript'];
+    answers.confirm = false;
+    await commitAndInit(dir);
+    return read(CONFIG);
+  };
+
+  it('scopes the browser globals to the src folders of a browser project', async () => {
+    const config = await initEnvironment();
+
+    expect(answers.environmentDefaults).toEqual(['browser', 'src/**']);
+    expect(config).toContain("...configs.browser({ files: ['src/**'] }),");
+    expect(config).toContain("...configs.node({ ignores: ['src/**'] }),");
+  });
+
+  it('writes the edited browser globs', async () => {
+    answers.browserFiles = 'apps/web/src/**, apps/admin/src/**';
+
+    const config = await initEnvironment();
+
+    expect(config).toContain(
+      "...configs.browser({ files: ['apps/web/src/**', 'apps/admin/src/**'] }),",
+    );
+    expect(config).toContain(
+      "...configs.node({ ignores: ['apps/web/src/**', 'apps/admin/src/**'] }),",
+    );
+  });
+
+  it('gives a node project node globals everywhere without asking for globs', async () => {
+    writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({ name: 'api', dependencies: { express: '^5.0.0' } }, undefined, 2),
+    );
+
+    const config = await initEnvironment();
+
+    expect(answers.environmentDefaults).toEqual(['node']);
+    expect(config).toContain('...configs.node(),');
+    expect(config).not.toContain('configs.browser');
+  });
+
+  it('migrates the legacy spreads and preselects the existing environment', async () => {
+    rmSync(path.join(dir, 'eslint.config.js'));
+    writeFileSync(
+      path.join(dir, CONFIG),
+      [
+        "import { configs } from '@uselab/linting';",
+        '',
+        'export default [',
+        '  ...configs.javascript(),',
+        '  ...configs.browser,',
+        '  ...configs.node,',
+        '];',
+        '',
+      ].join('\n'),
+    );
+    answers.browserFiles = 'web/**';
+
+    const migrated = await initEnvironment();
+
+    expect(migrated).toContain("...configs.browser({ files: ['web/**'] }),");
+    expect(migrated).toContain("...configs.node({ ignores: ['web/**'] }),");
+
+    answers.browserFiles = undefined;
+    answers.environmentDefaults = [];
+    expect(await initEnvironment()).toBe(migrated);
+    expect(answers.environmentDefaults).toEqual(['browser', 'web/**']);
   });
 });

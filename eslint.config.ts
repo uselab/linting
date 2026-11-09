@@ -5,7 +5,7 @@ export default [
   globalIgnores(['**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo']),
   ...configs.javascript(),
   ...configs.typescript,
-  ...configs.node,
+  ...configs.node(),
   {
     // Small flat library without path aliases; the parent-import ban targets app code.
     rules: {

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  detectBrowserFiles,
   detectPresets,
   detectSrcDirs,
   detectTestFiles,
@@ -21,8 +22,9 @@ afterEach(() => {
 
 describe('detectPresets', () => {
   it('always selects javascript and boundaries, aliases only for a bundler', () => {
-    const { presets } = detectPresets(dir, undefined, undefined);
-    expect(presets).toEqual(['javascript', 'node', 'boundaries']);
+    const { presets, projectType } = detectPresets(dir, undefined, undefined);
+    expect(presets).toEqual(['javascript', 'boundaries']);
+    expect(projectType).toBe('node');
   });
 
   it('selects prettier when a file Prettier can format exists', () => {
@@ -57,42 +59,51 @@ describe('detectPresets', () => {
       'javascript',
       'typescript',
       'vue',
-      'browser',
       'aliases',
       'boundaries',
       'prettier',
     ]);
     expect(detection.reasons.typescript).toContain('tsconfig.app.json');
     expect(detection.reasons.aliases).toContain('vite');
-    expect(detection.reasons.browser).toContain('vue');
+    expect(detection.projectType).toBe('browser');
+    expect(detection.projectTypeReason).toContain('vue');
   });
 
   it('detects React through next', () => {
-    const { presets } = detectPresets(dir, { dependencies: { next: '^15.0.0' } }, undefined);
-    expect(presets).toEqual(['javascript', 'react', 'browser', 'aliases', 'boundaries']);
+    const { presets, projectType } = detectPresets(
+      dir,
+      { dependencies: { next: '^15.0.0' } },
+      undefined,
+    );
+    expect(presets).toEqual(['javascript', 'react', 'aliases', 'boundaries']);
+    expect(projectType).toBe('browser');
   });
 
   it('detects a browser project from index.html', () => {
     writeFileSync(path.join(dir, 'index.html'), '<!doctype html>');
-    const { reasons } = detectPresets(dir, {}, undefined);
-    expect(reasons.browser).toContain('index.html');
-    expect(reasons.node).toBeUndefined();
+    const { projectType, projectTypeReason } = detectPresets(dir, {}, undefined);
+    expect(projectType).toBe('browser');
+    expect(projectTypeReason).toContain('index.html');
   });
 
-  it('detects a Node backend next to a browser framework', () => {
-    const { presets, reasons } = detectPresets(
+  it('prefers a browser project when a browser framework is next to a Node backend', () => {
+    const { projectType, projectTypeReason } = detectPresets(
       dir,
       { dependencies: { '@nestjs/core': '^11.0.0', react: '^19.0.0' } },
       undefined,
     );
-    expect(presets).toContain('node');
-    expect(reasons.node).toContain('@nestjs/core');
+    expect(projectType).toBe('browser');
+    expect(projectTypeReason).toContain('react');
   });
 
-  it('detects node from a bin field', () => {
-    writeFileSync(path.join(dir, 'index.html'), '');
-    const { reasons } = detectPresets(dir, { bin: './cli.js' }, undefined);
-    expect(reasons.node).toContain('bin');
+  it.each([
+    [{ dependencies: { '@nestjs/core': '^11.0.0' } }, '@nestjs/core'],
+    [{ bin: './cli.js' }, 'bin'],
+    [{}, 'no browser framework'],
+  ])('detects a Node project (%o)', (packageJson, reason) => {
+    const { projectType, projectTypeReason } = detectPresets(dir, packageJson, undefined);
+    expect(projectType).toBe('node');
+    expect(projectTypeReason).toContain(reason);
   });
 
   it('detects TypeScript from the typescript dependency or .ts sources', () => {
@@ -119,6 +130,30 @@ describe('detectTestFiles', () => {
     }
     writeFileSync(path.join(dir, 'test'), '');
     expect(detectTestFiles(dir)).toEqual(['tests/**', 'tst/**', 'tsts/**']);
+  });
+});
+
+describe('detectBrowserFiles', () => {
+  it('falls back to src/**', () => {
+    expect(detectBrowserFiles(dir, ['test/**'])).toEqual(['src/**']);
+  });
+
+  it('finds every outermost src folder outside the test folders', () => {
+    for (const folder of [
+      'src/features/x/src',
+      'apps/web/src',
+      'apps/admin/src',
+      'test/fixtures/a/src',
+      'node_modules/pkg/src',
+      '.cache/src',
+    ]) {
+      mkdirSync(path.join(dir, folder), { recursive: true });
+    }
+    expect(detectBrowserFiles(dir, ['./test/**'])).toEqual([
+      'apps/admin/src/**',
+      'apps/web/src/**',
+      'src/**',
+    ]);
   });
 });
 

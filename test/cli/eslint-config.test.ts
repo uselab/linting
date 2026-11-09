@@ -74,6 +74,10 @@ describe('readEslintConfig', () => {
       },
       boundariesEditable: true,
       boundariesRemovedOptions: [],
+      browserEditable: true,
+      browserLegacy: false,
+      nodeEditable: true,
+      nodeLegacy: false,
       ignores: { mode: 'all', globs: [] },
       ignoresEditable: true,
       ignoresLegacy: false,
@@ -162,7 +166,7 @@ describe('updateEslintConfig', () => {
       '...uselab.javascript(),',
       '...uselab.typescript,',
       '...uselab.vue,',
-      '...uselab.node,',
+      '...uselab.node(),',
       '...uselab.prettier,',
     ]);
   });
@@ -187,6 +191,7 @@ describe('updateEslintConfig', () => {
       removed: [],
       javascriptUpdated: false,
       boundariesUpdated: false,
+      globalsUpdated: [],
       ignoresUpdated: false,
       ignoresMigrated: false,
       boundariesRemovedOptions: [],
@@ -268,6 +273,109 @@ describe('updateEslintConfig', () => {
       boundariesRemovedOptions: ['include', 'elements'],
     });
     expect(update?.code).toContain("...uselab.boundaries({ tsconfig: 'tsconfig.app.json' }),");
+  });
+});
+
+describe('browser() / node()', () => {
+  const BROWSER = {
+    presets: ['javascript', 'browser', 'node'] satisfies PresetId[],
+    environment: { type: 'browser' as const, browserFiles: ['src/**', 'apps/web/src/**'] },
+  };
+  const NODE = {
+    presets: ['javascript', 'node'] satisfies PresetId[],
+    environment: { type: 'node' as const, browserFiles: [] },
+  };
+  const BROWSER_SPREADS = [
+    "...configs.browser({ files: ['src/**', 'apps/web/src/**'] }),",
+    "...configs.node({ ignores: ['src/**', 'apps/web/src/**'] }),",
+  ];
+
+  it('generates scoped globals for a browser project and node() for a Node project', () => {
+    expect(spreads(generateEslintConfig(BROWSER)).slice(2)).toEqual(BROWSER_SPREADS);
+    expect(spreads(generateEslintConfig(NODE)).slice(2)).toEqual(['...configs.node(),']);
+  });
+
+  it('reads the globs and the project type', () => {
+    expect(readEslintConfig(generateEslintConfig(BROWSER))).toMatchObject({
+      browserFiles: ['src/**', 'apps/web/src/**'],
+      nodeIgnores: ['src/**', 'apps/web/src/**'],
+      environment: BROWSER.environment,
+    });
+    expect(readEslintConfig(generateEslintConfig(NODE))).toMatchObject({
+      browserFiles: undefined,
+      nodeIgnores: undefined,
+      environment: { type: 'node', browserFiles: [] },
+    });
+  });
+
+  it('migrates the ...configs.browser / ...configs.node spreads of older versions', () => {
+    const text = [
+      "import { configs } from '@uselab/linting';",
+      'export default [',
+      '  ...configs.javascript(),',
+      '  ...configs.browser,',
+      '  ...configs.node,',
+      '];',
+    ].join('\n');
+    expect(readEslintConfig(text)).toMatchObject({
+      browserLegacy: true,
+      nodeLegacy: true,
+      environment: { type: 'browser', browserFiles: [] },
+    });
+    const update = updateEslintConfig(text, BROWSER);
+    expect(update?.globalsUpdated).toEqual(['browser', 'node']);
+    expect(spreads(update?.code)).toEqual(['...configs.javascript(),', ...BROWSER_SPREADS]);
+  });
+
+  it('migrates legacy spreads even when the project type is not asked', () => {
+    const text = [
+      "import { configs } from '@uselab/linting';",
+      'export default [',
+      '  ...configs.javascript(),',
+      '  ...configs.node,',
+      '];',
+    ].join('\n');
+    const update = updateEslintConfig(text, { presets: ['javascript', 'node'] });
+    expect(spreads(update?.code)).toEqual(['...configs.javascript(),', '...configs.node(),']);
+  });
+
+  it('rewrites changed browser globs', () => {
+    const text = generateEslintConfig(BROWSER);
+    const answers = {
+      ...BROWSER,
+      environment: { type: 'browser' as const, browserFiles: ['web/**'] },
+    };
+    const update = updateEslintConfig(text, answers);
+    expect(update?.globalsUpdated).toEqual(['browser', 'node']);
+    expect(spreads(update?.code).slice(2)).toEqual([
+      "...configs.browser({ files: ['web/**'] }),",
+      "...configs.node({ ignores: ['web/**'] }),",
+    ]);
+    expect(updateEslintConfig(text, BROWSER)?.code).toBe(text);
+  });
+
+  it('switches between a browser and a Node project', () => {
+    const toNode = updateEslintConfig(generateEslintConfig(BROWSER), NODE);
+    expect(toNode).toMatchObject({ removed: ['browser'], globalsUpdated: ['node'] });
+    expect(spreads(toNode?.code).slice(2)).toEqual(['...configs.node(),']);
+
+    const toBrowser = updateEslintConfig(generateEslintConfig(NODE), BROWSER);
+    expect(toBrowser).toMatchObject({ added: ['browser'], globalsUpdated: ['node'] });
+    expect(spreads(toBrowser?.code).slice(2)).toEqual(BROWSER_SPREADS);
+  });
+
+  it('leaves non-literal options unchanged', () => {
+    const text = [
+      "import { configs } from '@uselab/linting';",
+      "const files = ['src/**'];",
+      'export default [',
+      '  ...configs.javascript(),',
+      '  ...configs.browser({ files }),',
+      '  ...configs.node({ ignores: files }),',
+      '];',
+    ].join('\n');
+    expect(readEslintConfig(text)).toMatchObject({ browserEditable: false, nodeEditable: false });
+    expect(updateEslintConfig(text, BROWSER)).toMatchObject({ globalsUpdated: [], code: text });
   });
 });
 

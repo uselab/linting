@@ -1,14 +1,17 @@
 import { builders, generateCode, parseModule, type ASTNode, type ProxifiedModule } from 'magicast';
-import { DEFAULT_IGNORES } from '../../support/ignores';
+import { ALL_FILES, readGlobalIgnores, readLegacyIgnores } from './eslint-config-ignores';
+import { propertyKey, stringArray, stringValue, type PropertyNode } from './eslint-config-literals';
 import {
   GLOBAL_IGNORES,
   GLOBAL_IGNORES_MODULE,
-  IGNORE_EVERYTHING,
+  GLOBALS_OPTION_KEYS,
+  globsOptions,
   ignoresExpression,
-  KEEP_TOOLING_FILES,
   PRESET_ORDER,
   presetExpression,
   type BoundariesAnswers,
+  type EnvironmentAnswers,
+  type GlobalsPreset,
   type IgnoresAnswers,
   type InitAnswers,
   type JavaScriptAnswers,
@@ -42,6 +45,20 @@ export type ExistingConfig = {
   boundariesEditable: boolean;
   /** Options of older versions (`rootPath`, `include`, ...) that are dropped on update. */
   boundariesRemovedOptions: string[];
+  /** The `browser({ files })` globs, if any. */
+  browserFiles?: string[];
+  /** False when the `browser()` options aren't plain literals and can't be rewritten. */
+  browserEditable: boolean;
+  /** True for the `...configs.browser` spread of older versions (now a function). */
+  browserLegacy: boolean;
+  /** The `node({ ignores })` globs, if any. */
+  nodeIgnores?: string[];
+  /** False when the `node()` options aren't plain literals and can't be rewritten. */
+  nodeEditable: boolean;
+  /** True for the `...configs.node` spread of older versions (now a function). */
+  nodeLegacy: boolean;
+  /** Project type: browser when the browser preset is used, node for only the node preset. */
+  environment?: EnvironmentAnswers;
   /** Lint scope of the `globalIgnores()` entry; `all` when there is none. */
   ignores?: IgnoresAnswers;
   /** False when the `globalIgnores()` patterns aren't plain literals or not a recognised scope. */
@@ -56,6 +73,8 @@ export type ConfigUpdate = {
   removed: PresetId[];
   javascriptUpdated: boolean;
   boundariesUpdated: boolean;
+  /** The `browser()` / `node()` entries whose options were rewritten. */
+  globalsUpdated: GlobalsPreset[];
   ignoresUpdated: boolean;
   /** True when the legacy `...configs.ignores()` was replaced by `globalIgnores()`. */
   ignoresMigrated: boolean;
@@ -133,33 +152,12 @@ const ignoresEntry = (parsed: ParsedConfig): IgnoresEntry | undefined => {
   return legacy ? { index: legacyIndex, node: legacy.node, legacy: true } : undefined;
 };
 
-const stringValue = (node: ASTNode): string | undefined =>
-  node.type === 'StringLiteral' ? node.value : undefined;
-
-const stringArray = (node: ASTNode): string[] | undefined => {
-  if (node.type !== 'ArrayExpression') {
-    return undefined;
-  }
-  const values = node.elements.map((element) => (element ? stringValue(element) : undefined));
-  return values.every((value) => value !== undefined) ? values : undefined;
-};
-
-type ObjectNode = Extract<ASTNode, { type: 'ObjectExpression' }>;
-type PropertyNode = ObjectNode['properties'][number];
-
 /** Options of older versions; the app / features / support layout is no longer configurable. */
 export const REMOVED_BOUNDARIES_OPTIONS = ['elements', 'policies', 'files', 'include', 'rootPath'];
 
 type BoundariesOption =
   | { kind: 'value'; key: keyof BoundariesAnswers; value: string | string[] }
   | { kind: 'removed'; key: string };
-
-const propertyKey = (property: PropertyNode): string | undefined => {
-  if (property.type !== 'ObjectProperty' || property.computed) {
-    return undefined;
-  }
-  return property.key.type === 'Identifier' ? property.key.name : stringValue(property.key);
-};
 
 /** Reads one literal `srcDirs` / `tsconfig` option or a removed one; undefined for anything else. */
 const readBoundariesOption = (property: PropertyNode): BoundariesOption | undefined => {
@@ -209,98 +207,50 @@ const readBoundaries = (node: ASTNode): ReadBoundaries | undefined => {
   return { answers, removedOptions };
 };
 
-type ReadJavascript = { answers: JavaScriptAnswers; legacy: boolean };
+type ReadGlobsCall = { globs?: string[]; legacy: boolean };
 
-/** Reads `javascript`, `javascript()` and `javascript({ testFiles })` with a literal array. */
-const readJavascript = (node: ASTNode): ReadJavascript | undefined => {
+/**
+ * Reads `configs.name` (legacy spread), `name()` and `name({ [key]: [...] })` with a literal array.
+ * Undefined for anything else.
+ */
+const readGlobsCall = (node: ASTNode, key: string): ReadGlobsCall | undefined => {
   if (node.type === 'MemberExpression') {
-    return { answers: {}, legacy: true };
+    return { legacy: true };
   }
   if (node.type !== 'CallExpression' || node.arguments.length > 1) {
     return undefined;
   }
   const [options] = node.arguments;
   if (options === undefined) {
-    return { answers: {}, legacy: false };
+    return { legacy: false };
   }
   if (options.type !== 'ObjectExpression') {
     return undefined;
   }
-  const answers: JavaScriptAnswers = {};
+  let globs: string[] | undefined;
   for (const property of options.properties) {
     const value = property.type === 'ObjectProperty' ? stringArray(property.value) : undefined;
-    if (propertyKey(property) !== 'testFiles' || value === undefined) {
+    if (propertyKey(property) !== key || value === undefined) {
       return undefined;
     }
-    answers.testFiles = value;
+    globs = value;
   }
-  return { answers, legacy: false };
+  return { globs, legacy: false };
 };
 
-type PresetEntries = { javascript?: UselabEntry; boundaries?: UselabEntry };
+type ReadJavascript = { answers: JavaScriptAnswers; legacy: boolean };
 
-const ALL_FILES: IgnoresAnswers = { mode: 'all', globs: [] };
-
-/** Former defaults, read like the current ones and dropped when the entry is rewritten. */
-const LEGACY_DEFAULT_IGNORES: readonly string[] = ['**/coverage/**'];
-
-const isDefaultIgnore = (pattern: string): boolean =>
-  DEFAULT_IGNORES.includes(pattern) || LEGACY_DEFAULT_IGNORES.includes(pattern);
-
-/**
- * Reads opt-in patterns (`'**\/*', '!**\/*\/', '!src/**', 'src/legacy/**'`) back to their globs:
- * the negated patterns are the linted globs, the patterns after them the skipped `!globs`.
- */
-const readOptIn = (patterns: string[]): IgnoresAnswers | undefined => {
-  const rest = patterns.filter(
-    (pattern) => !IGNORE_EVERYTHING.includes(pattern) && pattern !== KEEP_TOOLING_FILES,
-  );
-  const firstSkipped = rest.findIndex((pattern) => !pattern.startsWith('!'));
-  const linted = firstSkipped === -1 ? rest : rest.slice(0, firstSkipped);
-  const skipped = firstSkipped === -1 ? [] : rest.slice(firstSkipped);
-  if (linted.length === 0 || skipped.some((pattern) => pattern.startsWith('!'))) {
-    return undefined;
-  }
-  return {
-    mode: 'only',
-    globs: [...linted.map((pattern) => pattern.slice(1)), ...skipped.map((glob) => `!${glob}`)],
-  };
+/** Reads `javascript`, `javascript()` and `javascript({ testFiles })` with a literal array. */
+const readJavascript = (node: ASTNode): ReadJavascript | undefined => {
+  const read = readGlobsCall(node, 'testFiles');
+  return read && { answers: read.globs ? { testFiles: read.globs } : {}, legacy: read.legacy };
 };
 
-/** Maps the scope patterns (without the defaults) to the lint scope. */
-const readScope = (patterns: string[]): IgnoresAnswers | undefined => {
-  if (patterns.length === 0) {
-    return ALL_FILES;
-  }
-  if (IGNORE_EVERYTHING.every((pattern) => patterns.includes(pattern))) {
-    return readOptIn(patterns);
-  }
-  return { mode: 'exclude', globs: patterns };
-};
-
-/** Reads the legacy `ignores()` / `ignores([...])` with literal patterns into the lint scope. */
-const readLegacyIgnores = (node: ASTNode): IgnoresAnswers | undefined => {
-  if (node.type !== 'CallExpression' || node.arguments.length > 1) {
-    return undefined;
-  }
-  const [argument] = node.arguments;
-  if (argument === undefined) {
-    return ALL_FILES;
-  }
-  const patterns = stringArray(argument);
-  return patterns === undefined ? undefined : readScope(patterns);
-};
-
-/** Reads `globalIgnores([...])` (and an optional name) with literal patterns into the lint scope. */
-const readGlobalIgnores = (node: ASTNode): IgnoresAnswers | undefined => {
-  if (node.type !== 'CallExpression' || node.arguments.length === 0 || node.arguments.length > 2) {
-    return undefined;
-  }
-  const [argument] = node.arguments;
-  const patterns = argument ? stringArray(argument) : undefined;
-  return patterns === undefined
-    ? undefined
-    : readScope(patterns.filter((pattern) => !isDefaultIgnore(pattern)));
+type PresetEntries = {
+  javascript?: UselabEntry;
+  boundaries?: UselabEntry;
+  browser?: UselabEntry;
+  node?: UselabEntry;
 };
 
 const readIgnoresOptions = (entry: IgnoresEntry | undefined) => {
@@ -329,6 +279,39 @@ const readBoundariesOptions = ({ boundaries }: PresetEntries) => {
   };
 };
 
+const readGlobalsOptions = (entries: PresetEntries) => {
+  const read = (preset: GlobalsPreset) => {
+    const entry = entries[preset];
+    const result = entry ? readGlobsCall(entry.node, GLOBALS_OPTION_KEYS[preset]) : undefined;
+    return {
+      globs: result?.globs,
+      editable: !entry || result !== undefined,
+      legacy: result?.legacy ?? false,
+    };
+  };
+  const browser = read('browser');
+  const node = read('node');
+  return {
+    browserFiles: browser.globs,
+    browserEditable: browser.editable,
+    browserLegacy: browser.legacy,
+    nodeIgnores: node.globs,
+    nodeEditable: node.editable,
+    nodeLegacy: node.legacy,
+  };
+};
+
+/** The project type of the existing presets; the browser globs fall back to the node ignores. */
+const readEnvironment = (
+  presets: PresetId[],
+  globals: ReturnType<typeof readGlobalsOptions>,
+): EnvironmentAnswers | undefined => {
+  if (presets.includes('browser')) {
+    return { type: 'browser', browserFiles: globals.browserFiles ?? globals.nodeIgnores ?? [] };
+  }
+  return presets.includes('node') ? { type: 'node', browserFiles: [] } : undefined;
+};
+
 /** Reads the presets of an existing `@uselab/linting` ESLint config. */
 export const readEslintConfig = (text: string): ExistingConfig | undefined => {
   const parsed = parseConfig(text);
@@ -339,11 +322,17 @@ export const readEslintConfig = (text: string): ExistingConfig | undefined => {
   const presetEntries: PresetEntries = {
     javascript: found.find(({ name }) => name === 'javascript'),
     boundaries: found.find(({ name }) => name === 'boundaries'),
+    browser: found.find(({ name }) => name === 'browser'),
+    node: found.find(({ name }) => name === 'node'),
   };
+  const presets = PRESET_ORDER.filter((preset) => found.some(({ name }) => name === preset));
+  const globals = readGlobalsOptions(presetEntries);
   return {
-    presets: PRESET_ORDER.filter((preset) => found.some(({ name }) => name === preset)),
+    presets,
     ...readJavascriptOptions(presetEntries),
     ...readBoundariesOptions(presetEntries),
+    ...globals,
+    environment: readEnvironment(presets, globals),
     ...readIgnoresOptions(ignoresEntry(parsed)),
   };
 };
@@ -434,6 +423,32 @@ const addPresets = (parsed: ParsedConfig, presets: PresetId[], answers: InitAnsw
   }
 };
 
+const GLOBALS_STATE = {
+  browser: ['browserFiles', 'browserEditable', 'browserLegacy'],
+  node: ['nodeIgnores', 'nodeEditable', 'nodeLegacy'],
+} as const;
+
+/** Rewrites `configs.browser` / `configs.node` to the call form and their globs when they changed. */
+const updateGlobals = (
+  parsed: ParsedConfig,
+  existing: ExistingConfig,
+  answers: InitAnswers,
+): GlobalsPreset[] =>
+  (['browser', 'node'] as const).filter((preset) => {
+    const [globsKey, editableKey, legacyKey] = GLOBALS_STATE[preset];
+    const options = globsOptions(GLOBALS_OPTION_KEYS[preset], existing[globsKey]);
+    const changed =
+      answers.environment !== undefined &&
+      `${parsed.local}.${preset}(${options})` !== presetExpression(preset, answers, parsed.local);
+    return (
+      answers.presets.includes(preset) &&
+      existing.presets.includes(preset) &&
+      existing[editableKey] &&
+      (existing[legacyKey] || changed) &&
+      replaceEntry(parsed, preset, answers)
+    );
+  });
+
 /** Rewrites the `boundaries()` options when they changed (or have removed options) and are literals. */
 const updateBoundaries = (
   parsed: ParsedConfig,
@@ -523,8 +538,9 @@ export const updateEslintIgnores = (
 
 /**
  * Updates an existing `@uselab/linting` ESLint config to the selected presets: adds the missing
- * ones in the canonical order, removes deselected ones, rewrites the `javascript()` and
- * `boundaries()` options and the `globalIgnores()` lint scope (migrating `configs.ignores()`).
+ * ones in the canonical order, removes deselected ones, rewrites the `javascript()`,
+ * `boundaries()`, `browser()` and `node()` options and the `globalIgnores()` lint scope
+ * (migrating `configs.ignores()`).
  * Other entries (custom rules, other plugins) are kept.
  * Returns undefined for other configs.
  */
@@ -544,20 +560,24 @@ export const updateEslintConfig = (
   removePresets(parsed, removed);
   const javascriptUpdated = updateJavascript(parsed, existing, answers);
   const boundariesUpdated = updateBoundaries(parsed, existing, answers);
+  const globalsUpdated = updateGlobals(parsed, existing, answers);
   addPresets(parsed, added, answers);
   const ignoresUpdated = updateIgnores(parsed, existing, answers);
-  const changed =
-    added.length > 0 ||
-    removed.length > 0 ||
-    javascriptUpdated ||
-    boundariesUpdated ||
-    ignoresUpdated;
+  const changed = [
+    added.length > 0,
+    removed.length > 0,
+    javascriptUpdated,
+    boundariesUpdated,
+    globalsUpdated.length > 0,
+    ignoresUpdated,
+  ].includes(true);
   return {
     code: changed ? printUpdated(parsed, ignoresUpdated) : text,
     added,
     removed,
     javascriptUpdated,
     boundariesUpdated,
+    globalsUpdated,
     ignoresUpdated,
     ignoresMigrated: ignoresUpdated && existing.ignoresLegacy,
     boundariesRemovedOptions: boundariesUpdated ? existing.boundariesRemovedOptions : [],

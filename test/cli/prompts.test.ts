@@ -2,7 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { splitGlobs, validateSrcDirs, validateTsconfigs } from '../../src/features/cli/prompts';
+import {
+  splitGlobs,
+  validateBrowserGlobs,
+  validateSrcDirs,
+  validateTsconfigs,
+} from '../../src/features/cli/prompts';
 
 let dir = '';
 
@@ -64,5 +69,20 @@ describe('splitGlobs', () => {
 
   it('returns an empty list for empty input', () => {
     expect(splitGlobs(' , ')).toEqual([]);
+  });
+});
+
+describe('validateBrowserGlobs', () => {
+  it('accepts globs', () => {
+    expect(validateBrowserGlobs('src/**, apps/web/src/**')).toBeUndefined();
+  });
+
+  it('requires at least one glob', () => {
+    expect(validateBrowserGlobs(' , ')).toBe('Enter at least one glob.');
+    expect(validateBrowserGlobs(undefined)).toBe('Enter at least one glob.');
+  });
+
+  it('rejects negated globs', () => {
+    expect(validateBrowserGlobs('src/**, !src/server/**')).toBe("Don't start globs with '!'.");
   });
 });

@@ -49,13 +49,28 @@ export type IgnoresAnswers = {
   globs: string[];
 };
 
+/** A browser project gets browser globals for its browser files and Node globals elsewhere. */
+export type ProjectType = 'browser' | 'node';
+
+export type EnvironmentAnswers = {
+  type: ProjectType;
+  /** Globs of the browser files; only used for a browser project. */
+  browserFiles: string[];
+};
+
 export type InitAnswers = {
   presets: PresetId[];
   javascript?: JavaScriptAnswers;
   boundaries?: BoundariesAnswers;
+  /** Project type; `browser()` / `node()` cover all files when undefined. */
+  environment?: EnvironmentAnswers;
   /** Lint scope; all files when undefined. */
   ignores?: IgnoresAnswers;
 };
+
+/** The presets of a project type: a browser project also gets Node globals outside its files. */
+export const environmentPresets = (type: ProjectType): PresetId[] =>
+  type === 'browser' ? ['browser', 'node'] : ['node'];
 
 /** Opt-in prefix: ignore everything, but keep descending into folders so negations can match. */
 export const IGNORE_EVERYTHING = ['**/*', '!**/*/'];
@@ -146,6 +161,19 @@ const javascriptOptions = (answers: JavaScriptAnswers = {}): string =>
     ? ''
     : `{ testFiles: ${stringOrArray(answers.testFiles)} }`;
 
+/** `{ key: [...] }`, or nothing without globs. */
+export const globsOptions = (key: string, globs: readonly string[] | undefined): string =>
+  globs === undefined || globs.length === 0 ? '' : `{ ${key}: ${stringOrArray([...globs])} }`;
+
+/** Option key of the browser globs: `browser({ files })` and `node({ ignores })`. */
+export const GLOBALS_OPTION_KEYS = { browser: 'files', node: 'ignores' } as const;
+
+export type GlobalsPreset = keyof typeof GLOBALS_OPTION_KEYS;
+
+/** The browser globs of a browser project, else none (the preset covers all files). */
+const browserGlobs = (environment: EnvironmentAnswers | undefined): string[] | undefined =>
+  environment?.type === 'browser' ? environment.browserFiles : undefined;
+
 const presetLine = (preset: PresetId, answers: InitAnswers): string =>
   `  ...${presetExpression(preset, answers)},`;
 
@@ -189,6 +217,10 @@ export const presetExpression = (
   }
   if (preset === 'javascript') {
     return `${local}.javascript(${javascriptOptions(answers.javascript)})`;
+  }
+  if (preset === 'browser' || preset === 'node') {
+    const options = globsOptions(GLOBALS_OPTION_KEYS[preset], browserGlobs(answers.environment));
+    return `${local}.${preset}(${options})`;
   }
   return `${local}.${preset}`;
 };

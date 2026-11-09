@@ -5,12 +5,16 @@ import { DEFAULT_IGNORES } from '../../support/ignores';
 import { hasNestedSrcDirs, NESTED_SRC_DIRS_MESSAGE } from '../../support/source-tsconfig';
 import { excludeTestSrcDirs } from './detect';
 import {
+  environmentPresets,
+  orderPresets,
   type BoundariesAnswers,
+  type EnvironmentAnswers,
   type IgnoresAnswers,
   type IgnoresMode,
   type InitAnswers,
   type JavaScriptAnswers,
   type PresetId,
+  type ProjectType,
 } from './generate';
 
 const isAnswer = <T>(value: T): value is Exclude<T, symbol> => !clack.isCancel(value);
@@ -27,8 +31,6 @@ export const unwrap = <T>(value: T): Exclude<T, symbol> => {
 const PRESET_OPTIONS: { value: PresetId; label: string; hint: string }[] = [
   { value: 'javascript', label: 'javascript', hint: 'base rules, required by the other presets' },
   { value: 'typescript', label: 'typescript', hint: 'typescript-eslint for .ts/.tsx/.vue' },
-  { value: 'node', label: 'node', hint: 'Node.js globals (backends, CLIs, libraries)' },
-  { value: 'browser', label: 'browser', hint: 'browser globals + no imperative DOM mutation' },
   { value: 'prettier', label: 'prettier', hint: 'disables conflicting rules + .prettierrc.json' },
   { value: 'vue', label: 'vue', hint: 'eslint-plugin-vue + Vue house rules' },
   { value: 'react', label: 'react', hint: '@eslint-react + react-hooks' },
@@ -106,6 +108,53 @@ export const splitGlobs = (value: string): string[] => {
   }
   globs.push(current);
   return globs.map((glob) => glob.trim()).filter((glob) => glob.length > 0);
+};
+
+const PROJECT_TYPE_OPTIONS: { value: ProjectType; label: string; hint: string }[] = [
+  {
+    value: 'browser',
+    label: 'Browser project',
+    hint: 'browser globals + no imperative DOM mutation for the browser files; Node globals elsewhere',
+  },
+  { value: 'node', label: 'Node project', hint: 'Node.js globals for all files' },
+];
+
+/** Validates the browser globs: at least one, and no `!` negations. */
+export const validateBrowserGlobs = (value: string | undefined): string | undefined => {
+  const globs = splitGlobs(value ?? '');
+  if (globs.length === 0) {
+    return 'Enter at least one glob.';
+  }
+  return globs.some((glob) => glob.startsWith('!')) ? "Don't start globs with '!'." : undefined;
+};
+
+/** Asks whether this is a browser or Node project, and the browser globs of a browser project. */
+const askEnvironment = async (
+  initialType: ProjectType,
+  initialBrowserFiles: readonly string[],
+): Promise<EnvironmentAnswers> => {
+  const type = unwrap(
+    await clack.select<ProjectType>({
+      message: 'Is this a browser or a Node project?',
+      options: PROJECT_TYPE_OPTIONS,
+      initialValue: initialType,
+    }),
+  );
+  if (type === 'node') {
+    return { type, browserFiles: [] };
+  }
+  const browserFiles = splitGlobs(
+    unwrap(
+      await clack.text({
+        message:
+          'Browser files: globs that get browser globals (comma separated; other files are Node)',
+        placeholder: 'src/**',
+        initialValue: initialBrowserFiles.join(', '),
+        validate: validateBrowserGlobs,
+      }),
+    ),
+  );
+  return { type, browserFiles };
 };
 
 const askJavascript = async (
@@ -286,6 +335,10 @@ export type BoundariesDefaults = {
 
 export type AskOptions = {
   initialPresets: PresetId[];
+  /** Initial project type: of an existing config, else the detected one. */
+  initialProjectType: ProjectType;
+  /** Initial browser globs: of an existing config, else the detected src folders. */
+  initialBrowserFiles: string[];
   boundariesDefaults: BoundariesDefaults;
   /** Detected test file globs, used when there is no existing `testFiles` option. */
   detectedTestFiles: readonly string[];
@@ -300,11 +353,14 @@ export type AskOptions = {
 };
 
 /**
- * Asks which presets to use, plus the test file globs when javascript is selected, the
- * boundaries options when boundaries is selected and which files ESLint lints.
+ * Asks the project type, the browser globs of a browser project, which presets to use, plus the
+ * test file globs when javascript is selected, the boundaries options when boundaries is
+ * selected and which files ESLint lints.
  */
 export const askAnswers = async ({
   initialPresets,
+  initialProjectType,
+  initialBrowserFiles,
   boundariesDefaults,
   detectedTestFiles,
   initialJavascript,
@@ -312,14 +368,18 @@ export const askAnswers = async ({
   initialIgnores,
   ignoresEditable = true,
 }: AskOptions): Promise<InitAnswers> => {
-  const presets = unwrap(
+  const environment = await askEnvironment(initialProjectType, initialBrowserFiles);
+  const selected = unwrap(
     await clack.multiselect<PresetId>({
       message: 'Which presets do you want?',
       options: PRESET_OPTIONS,
-      initialValues: initialPresets,
+      initialValues: initialPresets.filter((preset) =>
+        PRESET_OPTIONS.some(({ value }) => value === preset),
+      ),
       required: true,
     }),
   );
+  const presets = orderPresets([...selected, ...environmentPresets(environment.type)]);
   if (!presets.includes('javascript')) {
     clack.log.warn('The other presets build on `javascript`; you probably want to include it.');
   }
@@ -337,7 +397,7 @@ export const askAnswers = async ({
       )
     : undefined;
   const ignores = ignoresEditable ? await askIgnores(initialIgnores) : undefined;
-  return { presets, javascript, boundaries, ignores };
+  return { presets, javascript, boundaries, environment, ignores };
 };
 
 export const confirm = async (message: string, initialValue = true): Promise<boolean> =>

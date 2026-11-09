@@ -58,7 +58,7 @@ describe('generateEslintConfig', () => {
         '  ...configs.javascript(),',
         '  ...configs.typescript,',
         '  ...configs.react,',
-        '  ...configs.browser,',
+        '  ...configs.browser(),',
         '  ...configs.prettier,',
         '];',
         '',
