@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Uselab linting rules",
   "type": "module",
-  "license": "ISC",
+  "license": "MIT",
   "author": "Constantijn for Uselab",
   "repository": {
     "type": "git",

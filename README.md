@@ -281,4 +281,4 @@ Issues and pull requests are welcome. Run `npm test`, `npm run lint` and `npm ru
 
 ## License
 
-[ISC](https://opensource.org/license/isc-license-txt)
+[MIT](LICENSE)
