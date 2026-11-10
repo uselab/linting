@@ -1,5 +1,13 @@
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
+import {
+  DEFAULT_QUERY_LIBRARY,
+  QUERY_LIBRARIES,
+  queryLibrary,
+  type QueryFramework,
+  type QueryLibrary,
+  type QueryLibraryId,
+} from '../../support/query-libraries';
 import { DEFAULT_TEST_FILES, PRESET_ORDER, type PresetId, type ProjectType } from './generate';
 
 export type DetectablePackageJson = {
@@ -16,6 +24,8 @@ export type Detection = {
   projectType: ProjectType;
   /** Why the project type was detected. */
   projectTypeReason: string;
+  /** The query library of the detected framework; undefined without Vue or React. */
+  queryLibrary?: QueryLibraryId;
 };
 
 const VUE_PACKAGES = ['vue', 'nuxt'];
@@ -163,6 +173,30 @@ export const excludeTestSrcDirs = (srcDirs: string[], testFiles: readonly string
 const dependencyReason = (name: string | undefined): string | undefined =>
   name === undefined ? undefined : `${name} dependency`;
 
+/** The query library of a declared framework: an already declared one, else the framework default. */
+const detectQueryLibrary = (
+  declared: string[],
+  frameworks: QueryFramework[],
+): QueryLibrary | undefined => {
+  const [framework] = frameworks;
+  if (framework === undefined) {
+    return undefined;
+  }
+  const own = QUERY_LIBRARIES.filter((library) => library.framework === framework);
+  return (
+    own.find(({ packages }) => declared.includes(packages[0]?.name ?? '')) ??
+    queryLibrary(DEFAULT_QUERY_LIBRARY[framework])
+  );
+};
+
+const queryReason = (library: QueryLibrary | undefined, declared: string[]): string | undefined => {
+  if (library === undefined) {
+    return undefined;
+  }
+  const name = library.packages[0]?.name ?? library.id;
+  return declared.includes(name) ? `${name} dependency` : `${library.framework} project → ${name}`;
+};
+
 type Signals = {
   projectDir: string;
   declared: string[];
@@ -206,11 +240,17 @@ export const detectPresets = (
   const declared = Object.keys({ ...packageJson?.dependencies, ...packageJson?.devDependencies });
   const signals: Signals = { projectDir, declared, packageJson, tsconfigFile };
   const browser = browserReason(signals);
+  const frameworks: QueryFramework[] = [
+    ...(firstOf(declared, VUE_PACKAGES) ? (['vue'] as const) : []),
+    ...(firstOf(declared, REACT_PACKAGES) ? (['react'] as const) : []),
+  ];
+  const library = detectQueryLibrary(declared, frameworks);
   const found: Partial<Record<PresetId, string>> = {
     javascript: 'always',
     typescript: typescriptReason(signals),
     vue: dependencyReason(firstOf(declared, VUE_PACKAGES)),
     react: dependencyReason(firstOf(declared, REACT_PACKAGES)),
+    query: queryReason(library, declared),
     aliases: dependencyReason(firstOf(declared, ALIAS_PACKAGES)),
     boundaries: 'always',
     prettier: prettierReason(projectDir),
@@ -221,6 +261,7 @@ export const detectPresets = (
     reasons: Object.fromEntries(presets.map((preset) => [preset, found[preset]])),
     projectType: browser === undefined ? 'node' : 'browser',
     projectTypeReason: browser ?? nodeReason(signals),
+    queryLibrary: library?.id,
   };
 };
 

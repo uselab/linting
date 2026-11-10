@@ -16,6 +16,21 @@ export const restrictedSyntaxEntries = [
   },
 ];
 
+const ATTRIBUTE_HINT =
+  'Prefer reactive bindings. If unavoidable, document with an explicit eslint exception comment.';
+
+/** `no-restricted-properties` entries of the browser preset; other presets repeat them (options replace each other). */
+export const restrictedAttributeProperties = [
+  {
+    property: 'setAttribute',
+    message: `Do not use setAttribute directly. ${ATTRIBUTE_HINT}`,
+  },
+  {
+    property: 'removeAttribute',
+    message: `Do not use removeAttribute directly. ${ATTRIBUTE_HINT}`,
+  },
+];
+
 export const restrictedSyntax: Rules[string] = ['error', ...restrictedSyntaxEntries];
 
 const BINDINGS_HINT = 'Bind classes declaratively in templates/JSX or static HTML.';

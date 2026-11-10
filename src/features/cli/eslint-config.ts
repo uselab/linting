@@ -1,5 +1,6 @@
 import { builders, generateCode, parseModule, type ASTNode, type ProxifiedModule } from 'magicast';
 import { ALL_FILES, readGlobalIgnores, readLegacyIgnores } from './eslint-config-ignores';
+import { queryNeedsUpdate, readQueryOptions } from './eslint-config-query';
 import { propertyKey, stringArray, stringValue, type PropertyNode } from './eslint-config-literals';
 import {
   GLOBAL_IGNORES,
@@ -16,6 +17,7 @@ import {
   type InitAnswers,
   type JavaScriptAnswers,
   type PresetId,
+  type QueryAnswers,
 } from './generate';
 
 const PACKAGE = '@uselab/linting';
@@ -45,6 +47,9 @@ export type ExistingConfig = {
   boundariesEditable: boolean;
   /** Options of older versions (`rootPath`, `include`, ...) that are dropped on update. */
   boundariesRemovedOptions: string[];
+  query?: QueryAnswers;
+  /** False when the `query()` options aren't plain literals and can't be rewritten. */
+  queryEditable: boolean;
   /** The `browser({ files })` globs, if any. */
   browserFiles?: string[];
   /** False when the `browser()` options aren't plain literals and can't be rewritten. */
@@ -73,6 +78,7 @@ export type ConfigUpdate = {
   removed: PresetId[];
   javascriptUpdated: boolean;
   boundariesUpdated: boolean;
+  queryUpdated: boolean;
   /** The `browser()` / `node()` entries whose options were rewritten. */
   globalsUpdated: GlobalsPreset[];
   ignoresUpdated: boolean;
@@ -249,6 +255,7 @@ const readJavascript = (node: ASTNode): ReadJavascript | undefined => {
 type PresetEntries = {
   javascript?: UselabEntry;
   boundaries?: UselabEntry;
+  query?: UselabEntry;
   browser?: UselabEntry;
   node?: UselabEntry;
 };
@@ -322,6 +329,7 @@ export const readEslintConfig = (text: string): ExistingConfig | undefined => {
   const presetEntries: PresetEntries = {
     javascript: found.find(({ name }) => name === 'javascript'),
     boundaries: found.find(({ name }) => name === 'boundaries'),
+    query: found.find(({ name }) => name === 'query'),
     browser: found.find(({ name }) => name === 'browser'),
     node: found.find(({ name }) => name === 'node'),
   };
@@ -331,6 +339,7 @@ export const readEslintConfig = (text: string): ExistingConfig | undefined => {
     presets,
     ...readJavascriptOptions(presetEntries),
     ...readBoundariesOptions(presetEntries),
+    ...readQueryOptions(presetEntries.query),
     ...globals,
     environment: readEnvironment(presets, globals),
     ...readIgnoresOptions(ignoresEntry(parsed)),
@@ -421,6 +430,17 @@ const addPresets = (parsed: ParsedConfig, presets: PresetId[], answers: InitAnsw
       spreadElement(presetExpression(preset, answers, parsed.local)),
     );
   }
+};
+
+/** Rewrites the `query()` options when they changed and are literals. */
+const updateQuery = (
+  parsed: ParsedConfig,
+  existing: ExistingConfig,
+  answers: InitAnswers,
+): boolean => {
+  return (
+    queryNeedsUpdate(existing, answers, parsed.local) && replaceEntry(parsed, 'query', answers)
+  );
 };
 
 const GLOBALS_STATE = {
@@ -560,6 +580,7 @@ export const updateEslintConfig = (
   removePresets(parsed, removed);
   const javascriptUpdated = updateJavascript(parsed, existing, answers);
   const boundariesUpdated = updateBoundaries(parsed, existing, answers);
+  const queryUpdated = updateQuery(parsed, existing, answers);
   const globalsUpdated = updateGlobals(parsed, existing, answers);
   addPresets(parsed, added, answers);
   const ignoresUpdated = updateIgnores(parsed, existing, answers);
@@ -568,6 +589,7 @@ export const updateEslintConfig = (
     removed.length > 0,
     javascriptUpdated,
     boundariesUpdated,
+    queryUpdated,
     globalsUpdated.length > 0,
     ignoresUpdated,
   ].includes(true);
@@ -577,6 +599,7 @@ export const updateEslintConfig = (
     removed,
     javascriptUpdated,
     boundariesUpdated,
+    queryUpdated,
     globalsUpdated,
     ignoresUpdated,
     ignoresMigrated: ignoresUpdated && existing.ignoresLegacy,

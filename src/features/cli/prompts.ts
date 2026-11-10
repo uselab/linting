@@ -2,6 +2,11 @@ import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import * as clack from '@clack/prompts';
 import { DEFAULT_IGNORES } from '../../support/ignores';
+import {
+  QUERY_LIBRARIES,
+  type QueryLibrary,
+  type QueryLibraryId,
+} from '../../support/query-libraries';
 import { hasNestedSrcDirs, NESTED_SRC_DIRS_MESSAGE } from '../../support/source-tsconfig';
 import { excludeTestSrcDirs } from './detect';
 import {
@@ -15,6 +20,7 @@ import {
   type JavaScriptAnswers,
   type PresetId,
   type ProjectType,
+  type QueryAnswers,
 } from './generate';
 
 const isAnswer = <T>(value: T): value is Exclude<T, symbol> => !clack.isCancel(value);
@@ -39,6 +45,11 @@ const PRESET_OPTIONS: { value: PresetId; label: string; hint: string }[] = [
     hint: 'accessibility rules for Vue templates (needs vue; React support planned)',
   },
   { value: 'react', label: 'react', hint: '@eslint-react + react-hooks' },
+  {
+    value: 'query',
+    label: 'query',
+    hint: 'no fetch / axios outside src/support/http; use vue-query, react-query, swr, ... (needs vue or react)',
+  },
   {
     value: 'aliases',
     label: 'aliases',
@@ -160,6 +171,36 @@ const askEnvironment = async (
     ),
   );
   return { type, browserFiles };
+};
+
+/** The libraries of the selected frameworks; all of them when neither Vue nor React is selected. */
+export const queryLibraryOptions = (presets: readonly PresetId[]): QueryLibrary[] => {
+  const frameworks = (['vue', 'react'] as const).filter((framework) => presets.includes(framework));
+  const matching = QUERY_LIBRARIES.filter(({ framework }) => frameworks.includes(framework));
+  return matching.length > 0 ? matching : [...QUERY_LIBRARIES];
+};
+
+const askQuery = async (
+  presets: readonly PresetId[],
+  initial: QueryAnswers | undefined,
+  detected: QueryLibraryId | undefined,
+): Promise<QueryAnswers> => {
+  const libraries = queryLibraryOptions(presets);
+  const preferred = [initial?.library, detected].find((id) =>
+    libraries.some((library) => library.id === id),
+  );
+  const library = unwrap(
+    await clack.select<QueryLibraryId>({
+      message: 'Which library handles server state (replaces fetch / axios)?',
+      options: libraries.map(({ id, label, framework }) => ({
+        value: id,
+        label,
+        hint: libraries.length > 3 ? framework : undefined,
+      })),
+      initialValue: preferred ?? libraries[0]?.id,
+    }),
+  );
+  return { library, allow: initial?.allow };
 };
 
 const askJavascript = async (
@@ -351,6 +392,10 @@ export type AskOptions = {
   initialJavascript?: JavaScriptAnswers;
   /** Boundaries options of an existing config, used as initial values. */
   initialBoundaries?: BoundariesAnswers;
+  /** Query options of an existing config, used as initial values. */
+  initialQuery?: QueryAnswers;
+  /** The detected query library of the project's framework. */
+  detectedQueryLibrary?: QueryLibraryId;
   /** Lint scope of an existing config, used as initial value. Undefined when it isn't editable. */
   initialIgnores?: IgnoresAnswers;
   /** False when the existing `globalIgnores()` can't be rewritten; the scope isn't asked then. */
@@ -363,6 +408,9 @@ const warnAboutPresets = (presets: PresetId[]): void => {
   }
   if (presets.includes('vueA11y') && !presets.includes('vue')) {
     clack.log.warn('`vueA11y` only checks .vue files; you probably want to include `vue`.');
+  }
+  if (presets.includes('query') && !presets.includes('vue') && !presets.includes('react')) {
+    clack.log.warn('`query` is meant for Vue or React projects; you probably want to include one.');
   }
   if (presets.includes('vue') && presets.includes('react')) {
     clack.log.warn('Both vue and react are selected. That is unusual, but allowed.');
@@ -382,6 +430,8 @@ export const askAnswers = async ({
   detectedTestFiles,
   initialJavascript,
   initialBoundaries,
+  initialQuery,
+  detectedQueryLibrary,
   initialIgnores,
   ignoresEditable = true,
 }: AskOptions): Promise<InitAnswers> => {
@@ -412,8 +462,11 @@ export const askAnswers = async ({
         javascript?.testFiles ?? detectedTestFiles,
       )
     : undefined;
+  const query = presets.includes('query')
+    ? await askQuery(presets, initialQuery, detectedQueryLibrary)
+    : undefined;
   const ignores = ignoresEditable ? await askIgnores(initialIgnores) : undefined;
-  return { presets, javascript, boundaries, environment, ignores };
+  return { presets, javascript, boundaries, query, environment, ignores };
 };
 
 export const confirm = async (message: string, initialValue = true): Promise<boolean> =>

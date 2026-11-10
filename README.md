@@ -19,7 +19,7 @@ npx @uselab/linting init [dir]
 
 Run it in a git repository without uncommitted changes, so you can review and revert everything it does. `init` replaces the existing lint/format setup:
 
-- detects the project (browser or Node, Vue, React, TypeScript, bundler, ...) and preselects presets, then asks you to confirm them, the [test file globs](#test-files), the [src folders](#project-structure-boundaries) and the lint scope ([`globalIgnores()`](#ignores));
+- detects the project (browser or Node, Vue, React, TypeScript, bundler, ...) and preselects presets, then asks you to confirm them (and the [query library](#query-libraries)), the [test file globs](#test-files), the [src folders](#project-structure-boundaries) and the lint scope ([`globalIgnores()`](#ignores));
 - sets `"type": "module"` in `package.json` and writes `eslint.config.ts` / `.mts` (and `prettier.config.ts` / `.mts`). An existing `@uselab/linting` config is updated in place and custom entries are kept. Remaining CommonJS code is listed in `REFACTOR-COMMON-JS.md`;
 - removes other ESLint, Prettier, Biome, TSLint, XO, oxlint and dprint configs and their packages;
 - updates `devDependencies` and adds the `lint`, `lint:fix`, `lint:analyze` scripts (plus `format`, `format:check` with `prettier` and `typecheck` with `typescript`);
@@ -107,18 +107,30 @@ Prettier loads TypeScript configs since 3.5 (Node 22.18+).
 
 ## Presets
 
-| Preset                 | Contents                                                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `javascript(options?)` | ESLint, import-x, sonarjs and unicorn picks plus house rules (no `null`, kebab-case filenames, size limits, ...). Option: `testFiles`.     |
-| `typescript`           | `typescript-eslint` recommended, `type` over `interface`, inline type imports, no type assertions.                                         |
-| `vue`                  | `eslint-plugin-vue` recommended, house rules (block order, type-based props and emits, ...), `template-structure` rule.                    |
-| `vueA11y`              | Opt-in, with `vue`: `eslint-plugin-vuejs-accessibility` recommended.                                                                       |
-| `react`                | `@eslint-react` and `react-hooks` recommended, no inline `style`, no `props.x` in JSX.                                                     |
-| `browser(options?)`    | Browser globals and no imperative DOM mutation. Options: `files`, `ignores`.                                                               |
-| `node(options?)`       | Node globals. Options: `files`, `ignores`; default: all files.                                                                             |
-| `aliases`              | Bundler projects only: no `../x` imports; use [path aliases](#path-aliases).                                                               |
-| `boundaries(options?)` | The fixed `app` / `features` / `support` [project structure](#project-structure-boundaries). Options: `srcDirs`, `tsconfig`.              |
-| `prettier`             | `eslint-config-prettier`. Always last.                                                                                                     |
+| Preset                 | Contents                                                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `javascript(options?)` | ESLint, import-x, sonarjs and unicorn picks plus house rules (no `null`, kebab-case filenames, size limits, ...). Option: `testFiles`.                                         |
+| `typescript`           | `typescript-eslint` recommended, `type` over `interface`, inline type imports, no type assertions.                                                                             |
+| `vue`                  | `eslint-plugin-vue` recommended, house rules (block order, type-based props and emits, ...), `template-structure` rule.                                                        |
+| `vueA11y`              | Opt-in, with `vue`: `eslint-plugin-vuejs-accessibility` recommended.                                                                                                           |
+| `react`                | `@eslint-react` and `react-hooks` recommended, no inline `style`, no `props.x` in JSX.                                                                                         |
+| `query(options?)`      | Server state via a query library: no `fetch`, no HTTP clients (axios, ky, ...) outside `allow`. Options: `library`, `allow`, `files`. See [Query libraries](#query-libraries). |
+| `browser(options?)`    | Browser globals and no imperative DOM mutation. Options: `files`, `ignores`.                                                                                                   |
+| `node(options?)`       | Node globals. Options: `files`, `ignores`; default: all files.                                                                                                                 |
+| `aliases`              | Bundler projects only: no `../x` imports; use [path aliases](#path-aliases).                                                                                                   |
+| `boundaries(options?)` | The fixed `app` / `features` / `support` [project structure](#project-structure-boundaries). Options: `srcDirs`, `tsconfig`.                                                   |
+| `prettier`             | `eslint-config-prettier`. Always last.                                                                                                                                         |
+
+### Query libraries
+
+`configs.query({ library })` bans `fetch` (and `window/globalThis/self.fetch`) and imports of axios, ky, got, superagent, node-fetch and ofetch, so requests go through a query library. Raw HTTP stays allowed in `allow` (default `['src/support/http/**']`).
+
+| Framework | `library`                                     |
+| --------- | --------------------------------------------- |
+| Vue       | `vue-query` (default), `pinia-colada`, `swrv` |
+| React     | `react-query` (default), `swr`, `rtk-query`   |
+
+`init` selects `query` for Vue and React projects, preselects an already declared library, and adds the library packages to `dependencies`.
 
 ### Size limits
 
@@ -237,10 +249,10 @@ Each src folder has its own layout and is isolated: files may not import from an
 
 #### Options
 
-| Option     | Type                 | Default             | Description                                                              |
-| ---------- | -------------------- | ------------------- | ------------------------------------------------------------------------ |
-| `srcDirs`  | `string[]`           | `['src']`           | Src folders relative to the project root. They can't be nested.          |
-| `tsconfig` | `string \| string[]` | Detected per folder | tsconfig(s) used to resolve imports such as `@features/cart`.            |
+| Option     | Type                 | Default             | Description                                                     |
+| ---------- | -------------------- | ------------------- | --------------------------------------------------------------- |
+| `srcDirs`  | `string[]`           | `['src']`           | Src folders relative to the project root. They can't be nested. |
+| `tsconfig` | `string \| string[]` | Detected per folder | tsconfig(s) used to resolve imports such as `@features/cart`.   |
 
 #### Which tsconfig is used
 

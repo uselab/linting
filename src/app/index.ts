@@ -5,6 +5,7 @@ import { browser } from '../features/eslint-presets/browser';
 import { javascript } from '../features/eslint-presets/javascript';
 import { node } from '../features/eslint-presets/node';
 import { prettier } from '../features/eslint-presets/prettier';
+import { query } from '../features/eslint-presets/query';
 import { react } from '../features/eslint-presets/react';
 import { typescript } from '../features/eslint-presets/typescript';
 import { vue } from '../features/eslint-presets/vue';
@@ -33,6 +34,7 @@ export const configs = {
   vue,
   vueA11y: vueA11yPreset,
   react,
+  query,
   browser,
   node,
   aliases,
@@ -51,3 +53,5 @@ export { type BoundariesOptions } from '../features/eslint-presets/boundaries';
 export { type JavaScriptOptions } from '../features/eslint-presets/javascript';
 export { type BrowserOptions } from '../features/eslint-presets/browser';
 export { type NodeOptions } from '../features/eslint-presets/node';
+export { type QueryOptions } from '../features/eslint-presets/query';
+export { type QueryLibraryId } from '../support/query-libraries';

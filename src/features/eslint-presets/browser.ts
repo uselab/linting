@@ -1,9 +1,10 @@
 import globals from 'globals';
-import { restrictedDomSyntaxEntries, restrictedSyntaxEntries } from '../../support/env';
+import {
+  restrictedAttributeProperties,
+  restrictedDomSyntaxEntries,
+  restrictedSyntaxEntries,
+} from '../../support/env';
 import { JSX_FILES, scope, SOURCE_FILES, type Config } from '../../support/shared';
-
-const ATTRIBUTE_HINT =
-  'Prefer reactive bindings. If unavoidable, document with an explicit eslint exception comment.';
 
 export type BrowserOptions = {
   /**
@@ -34,17 +35,7 @@ export const browser = (options: BrowserOptions = {}): Config[] => {
       name: 'uselab/browser/ui-enforcement',
       ...scope(ruleFiles, options.ignores),
       rules: {
-        'no-restricted-properties': [
-          'error',
-          {
-            property: 'setAttribute',
-            message: `Do not use setAttribute directly. ${ATTRIBUTE_HINT}`,
-          },
-          {
-            property: 'removeAttribute',
-            message: `Do not use removeAttribute directly. ${ATTRIBUTE_HINT}`,
-          },
-        ],
+        'no-restricted-properties': ['error', ...restrictedAttributeProperties],
       },
     },
     {
