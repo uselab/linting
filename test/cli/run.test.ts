@@ -84,6 +84,9 @@ vi.mock('@clack/prompts', () => {
         answers.environmentDefaults.push(initialValue);
         return answers.projectType ?? initialValue;
       }
+      if (message.startsWith('Which library handles server state')) {
+        return 'no';
+      }
       answers.selects.push(message);
       return answers.ignoresMode ?? initialValue;
     },

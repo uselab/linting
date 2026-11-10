@@ -249,6 +249,7 @@ export const detectPresets = (
     javascript: 'always',
     typescript: typescriptReason(signals),
     vue: dependencyReason(firstOf(declared, VUE_PACKAGES)),
+    vueA11y: dependencyReason(firstOf(declared, VUE_PACKAGES)),
     react: dependencyReason(firstOf(declared, REACT_PACKAGES)),
     query: queryReason(library, declared),
     aliases: dependencyReason(firstOf(declared, ALIAS_PACKAGES)),

@@ -1,5 +1,6 @@
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { styleText } from 'node:util';
 import * as clack from '@clack/prompts';
 import { DEFAULT_IGNORES } from '../../support/ignores';
 import {
@@ -46,11 +47,6 @@ const PRESET_OPTIONS: { value: PresetId; label: string; hint: string }[] = [
   },
   { value: 'react', label: 'react', hint: '@eslint-react + react-hooks' },
   {
-    value: 'query',
-    label: 'query',
-    hint: 'no fetch / axios outside src/support/http; use vue-query, react-query, swr, ... (needs vue or react)',
-  },
-  {
     value: 'aliases',
     label: 'aliases',
     hint: '@app / @features / @support instead of ../ imports; needs a bundler such as Vite',
@@ -61,6 +57,15 @@ const PRESET_OPTIONS: { value: PresetId; label: string; hint: string }[] = [
     hint: 'project structure, guided by the principles of Domain-Driven Design (DDD): app / features / support',
   },
 ];
+
+const PRESET_LABEL_WIDTH = Math.max(...PRESET_OPTIONS.map(({ label }) => label.length));
+
+/** clack only shows `hint` on the focused option; put it in the label to always show it. */
+const withVisibleHints = (options: typeof PRESET_OPTIONS): { value: PresetId; label: string }[] =>
+  options.map(({ value, label, hint }) => ({
+    value,
+    label: `${label.padEnd(PRESET_LABEL_WIDTH)}  ${styleText('dim', hint)}`,
+  }));
 
 const splitList = (value: string): string[] =>
   value
@@ -180,27 +185,35 @@ export const queryLibraryOptions = (presets: readonly PresetId[]): QueryLibrary[
   return matching.length > 0 ? matching : [...QUERY_LIBRARIES];
 };
 
+const NO_QUERY = 'no';
+
+/** Asks which query library handles server state; undefined when the answer is "No". */
 const askQuery = async (
   presets: readonly PresetId[],
   initial: QueryAnswers | undefined,
   detected: QueryLibraryId | undefined,
-): Promise<QueryAnswers> => {
+  wasEnabled: boolean,
+): Promise<QueryAnswers | undefined> => {
   const libraries = queryLibraryOptions(presets);
   const preferred = [initial?.library, detected].find((id) =>
     libraries.some((library) => library.id === id),
   );
   const library = unwrap(
-    await clack.select<QueryLibraryId>({
-      message: 'Which library handles server state (replaces fetch / axios)?',
-      options: libraries.map(({ id, label, framework }) => ({
-        value: id,
-        label,
-        hint: libraries.length > 3 ? framework : undefined,
-      })),
-      initialValue: preferred ?? libraries[0]?.id,
+    await clack.select<QueryLibraryId | typeof NO_QUERY>({
+      message:
+        'Which library handles server state? (no fetch / axios outside src/support/http)',
+      options: [
+        { value: NO_QUERY, label: 'No' },
+        ...libraries.map(({ id, label, framework }) => ({
+          value: id,
+          label,
+          hint: libraries.length > 3 ? framework : undefined,
+        })),
+      ],
+      initialValue: wasEnabled ? (preferred ?? libraries[0]?.id) : NO_QUERY,
     }),
   );
-  return { library, allow: initial?.allow };
+  return library === NO_QUERY ? undefined : { library, allow: initial?.allow };
 };
 
 const askJavascript = async (
@@ -409,9 +422,6 @@ const warnAboutPresets = (presets: PresetId[]): void => {
   if (presets.includes('vueA11y') && !presets.includes('vue')) {
     clack.log.warn('`vueA11y` only checks .vue files; you probably want to include `vue`.');
   }
-  if (presets.includes('query') && !presets.includes('vue') && !presets.includes('react')) {
-    clack.log.warn('`query` is meant for Vue or React projects; you probably want to include one.');
-  }
   if (presets.includes('vue') && presets.includes('react')) {
     clack.log.warn('Both vue and react are selected. That is unusual, but allowed.');
   }
@@ -443,15 +453,25 @@ export const askAnswers = async ({
   const selected = unwrap(
     await clack.multiselect<PresetId>({
       message: 'Which presets do you want?',
-      options,
+      options: withVisibleHints(options),
       initialValues: initialPresets.filter((preset) =>
         options.some(({ value }) => value === preset),
       ),
       required: true,
     }),
   );
-  const presets = orderPresets([...selected, ...environmentPresets(environment.type)]);
-  warnAboutPresets(presets);
+  const basePresets = orderPresets([...selected, ...environmentPresets(environment.type)]);
+  warnAboutPresets(basePresets);
+  const query =
+    basePresets.includes('vue') || basePresets.includes('react')
+      ? await askQuery(
+          basePresets,
+          initialQuery,
+          detectedQueryLibrary,
+          initialPresets.includes('query'),
+        )
+      : undefined;
+  const presets = query ? orderPresets([...basePresets, 'query']) : basePresets;
   const javascript = presets.includes('javascript')
     ? await askJavascript(initialJavascript, detectedTestFiles)
     : undefined;
@@ -461,9 +481,6 @@ export const askAnswers = async ({
         initialBoundaries,
         javascript?.testFiles ?? detectedTestFiles,
       )
-    : undefined;
-  const query = presets.includes('query')
-    ? await askQuery(presets, initialQuery, detectedQueryLibrary)
     : undefined;
   const ignores = ignoresEditable ? await askIgnores(initialIgnores) : undefined;
   return { presets, javascript, boundaries, query, environment, ignores };

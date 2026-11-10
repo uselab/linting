@@ -70,6 +70,7 @@ import { updateSourceTsconfigs, updateViteConfig } from './aliases';
 import { runAnalyze } from './analyze';
 import { offerAnalyze } from './analyze-offer';
 import { isInstalledOutdated } from './install';
+import { ownVersion } from './own-version';
 
 export const USAGE = `Usage: uselab-linting init [dir]
        uselab-linting analyze [dir]
@@ -98,20 +99,7 @@ const readPackageJson = (projectDir: string): ProjectPackage | undefined => {
   return { text, data: JSON.parse(text) };
 };
 
-const ownVersion = (): string => {
-  for (const candidate of ['../package.json', '../../../package.json']) {
-    const file = new URL(candidate, import.meta.url);
-    if (existsSync(file)) {
-      const data: { name?: string; version?: string } = JSON.parse(readFileSync(file, 'utf8'));
-      if (data.name === '@uselab/linting' && data.version) {
-        return data.version;
-      }
-    }
-  }
-  return '1.0.0';
-};
-
-const writeFile = (tracked: TrackedFiles, file: string, content: string): void => {
+const writeFile =  (tracked: TrackedFiles, file: string, content: string): void => {
   tracked.write(file, content);
   clack.log.success(`Wrote ${file}.`);
 };
@@ -504,7 +492,7 @@ const runInit = async (dir: string | undefined): Promise<void> => {
     fail(gitError);
     return;
   }
-  clack.intro('@uselab/linting');
+  clack.intro(`@uselab/linting@${ownVersion()}`);
   await init(projectDir);
 };
 

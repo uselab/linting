@@ -59,6 +59,7 @@ describe('detectPresets', () => {
       'javascript',
       'typescript',
       'vue',
+      'vueA11y',
       'query',
       'aliases',
       'boundaries',
