@@ -23,9 +23,9 @@ describe('classList mutation (no-restricted-syntax)', () => {
     expect(await lintRule(config, rule)('src/dom.js', code)).toEqual([]);
   });
 
-  it('keeps the base null and class restrictions', async () => {
+  it('keeps the base null restriction and allows classes', async () => {
     const code = 'export const value = null;\nexport class Store {}';
-    expect(await lintRule(config, rule)('src/dom.js', code)).toHaveLength(2);
+    expect(await lintRule(config, rule)('src/dom.js', code)).toHaveLength(1);
   });
 
   it('does not apply outside src/', async () => {

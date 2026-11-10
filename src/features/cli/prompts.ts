@@ -386,12 +386,16 @@ export const askAnswers = async ({
   ignoresEditable = true,
 }: AskOptions): Promise<InitAnswers> => {
   const environment = await askEnvironment(initialProjectType, initialBrowserFiles);
+  // Node doesn't resolve the aliases, so a Node project can't use the aliases preset.
+  const options = PRESET_OPTIONS.filter(
+    ({ value }) => !(environment.type === 'node' && value === 'aliases'),
+  );
   const selected = unwrap(
     await clack.multiselect<PresetId>({
       message: 'Which presets do you want?',
-      options: PRESET_OPTIONS,
+      options,
       initialValues: initialPresets.filter((preset) =>
-        PRESET_OPTIONS.some(({ value }) => value === preset),
+        options.some(({ value }) => value === preset),
       ),
       required: true,
     }),

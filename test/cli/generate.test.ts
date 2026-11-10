@@ -229,8 +229,10 @@ describe('generated ESLint config', () => {
     const eslint = new ESLint({ cwd: dir, overrideConfigFile: configFile });
     const resolved = await eslint.calculateConfigForFile(path.join(dir, 'src', 'main.js'));
     expect(resolved.rules?.['no-alert']).toBeDefined();
-    expect(resolved.rules?.['no-restricted-imports'] !== undefined).toBe(
-      answers.presets.includes('aliases'),
-    );
+    const restricted = resolved.rules?.['no-restricted-imports'];
+    const severity = Array.isArray(restricted) ? restricted[0] : restricted;
+    // the node preset (after aliases) turns the rule off for its files
+    const active = answers.presets.includes('aliases') && !answers.presets.includes('node');
+    expect(severity !== undefined && severity !== 0 && severity !== 'off').toBe(active);
   });
 });

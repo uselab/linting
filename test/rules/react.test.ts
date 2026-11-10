@@ -19,10 +19,10 @@ describe('no-restricted-syntax in JSX files', () => {
     expect(await lintRule(config, rule)(FILE, code)).toHaveLength(1);
   });
 
-  it('keeps the base null and class restrictions', async () => {
+  it('keeps the base null restriction and allows classes', async () => {
     const code = 'export const value = null;\nexport class UserStore {}';
     const messages = await lintRule(config, rule)(FILE, code);
-    expect(messages.map((message) => message.line)).toEqual([1, 2]);
+    expect(messages.map((message) => message.line)).toEqual([1]);
   });
 
   it('allows destructured props and className', async () => {

@@ -21,8 +21,8 @@ export const PRESET_ORDER: readonly PresetId[] = [
   'vueA11y',
   'react',
   'browser',
-  'node',
   'aliases',
+  'node',
   'boundaries',
   'prettier',
 ];

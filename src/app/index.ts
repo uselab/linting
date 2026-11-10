@@ -22,6 +22,7 @@ import { templateStructurePlugin } from '../support/eslint-plugins/template-stru
  *   ...configs.vue,
  *   ...configs.browser(), // or browser({ files: ['src/**'] }) + node({ ignores: ['src/**'] })
  *   ...configs.aliases, // only when the bundler resolves the path aliases (e.g. Vite)
+ *   ...configs.node(), // after aliases: Node files may use relative imports
  *   ...configs.prettier, // always last
  * ];
  * ```

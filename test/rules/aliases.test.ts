@@ -24,3 +24,18 @@ describe('no-restricted-imports (no parent-relative imports)', () => {
     expect(await lintImports(FILE, code)).toEqual([]);
   });
 });
+
+describe('with the node preset after aliases', () => {
+  const lintNode = lintRule(
+    [...configs.javascript(), ...configs.aliases, ...configs.node({ ignores: ['src/web/**'] })],
+    'no-restricted-imports',
+  );
+
+  it('allows parent-relative imports in Node files', async () => {
+    expect(await lintNode(FILE, "import a from '../a';")).toEqual([]);
+  });
+
+  it('still reports them in the ignored (browser) files', async () => {
+    expect(await lintNode('src/web/page.js', "import a from '../a';")).toHaveLength(1);
+  });
+});
