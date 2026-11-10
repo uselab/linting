@@ -111,13 +111,16 @@ const resolverOptions = (srcDirs: string[], tsconfig: string | string[] | undefi
   return project.length > 0 ? { project, alwaysTryTypes: true } : { alwaysTryTypes: true };
 };
 
-/** Source files of a src dir must be in app/, features/ or support/; only `.d.ts` files may not. */
+/**
+ * Source files of a src dir must be in app/, features/ or support/; only `.d.ts` files directly in
+ * the src dir (e.g. `vite-env.d.ts`) may not.
+ */
 const fileLocationConfig = (srcDir: string): Config => {
   const src = escapeGlob(srcDir);
   return {
     name: `uselab/boundaries/file-location/${srcDir}`,
     files: [`${src}/**/*.${SOURCE_EXTENSIONS}`],
-    ignores: [`${src}/{app,features,support}/**`, '**/*.d.{ts,mts,cts}'],
+    ignores: [`${src}/{app,features,support}/**`, `${src}/*.d.{ts,mts,cts}`],
     plugins: { 'uselab-layout': layoutPlugin },
     rules: { 'uselab-layout/file-location': ['error', { srcDir }] },
   };

@@ -24,7 +24,7 @@ const fileLocation: Rule.RuleModule = {
     schema: SRC_DIR_SCHEMA,
     messages: {
       outsideLayout:
-        'Files in {{ srcDir }}/ must be in app/, features/ or support/. Entry files such as main.ts belong in app/.',
+        'Files in {{ srcDir }}/ must be in app/, features/ or support/. Entry files such as main.ts belong in app/. Only declaration files (*.d.ts) are allowed directly in {{ srcDir }}/.',
     },
   },
   create: (context) => {

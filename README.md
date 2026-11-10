@@ -295,10 +295,10 @@ src/
 │   ├── cart/       # one folder per feature
 │   └── orders/
 ├── support/        # generic helpers, UI components, API clients; no business features
-└── env.d.ts        # only declaration files may live elsewhere in src
+└── env.d.ts        # only declaration files may live directly in src
 ```
 
-Every source file (`.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.mts`, `.cts`, `.tsx`, `.vue`) in a src folder must be in `app/`, `features/` or `support/`. Entry files such as `main.ts` and `App.vue` belong in `app/`; a folder with source files such as `src/router/` is reported as well (move it into one of the three). Other files (CSS, images) are not reported themselves, but [importing them](#imports-from-outside-the-layout) is. Only declaration files (`*.d.ts`, e.g. Vite's `vite-env.d.ts`) are allowed anywhere. The rule is `uselab-layout/file-location`: "Files in `<src folder>`/ must be in app/, features/ or support/. Entry files such as main.ts belong in app/."
+Every source file (`.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.mts`, `.cts`, `.tsx`, `.vue`) in a src folder must be in `app/`, `features/` or `support/`. Entry files such as `main.ts` and `App.vue` belong in `app/`; a folder with source files such as `src/router/` is reported as well (move it into one of the three). Other files (CSS, images) are not reported themselves, but [importing them](#imports-from-outside-the-layout) is. Only declaration files (`*.d.ts`, e.g. Vite's `vite-env.d.ts`) are allowed, and only directly in the src folder, not in a subfolder. The rule is `uselab-layout/file-location`: "Files in `<src folder>`/ must be in app/, features/ or support/. Entry files such as main.ts belong in app/. Only declaration files (*.d.ts) are allowed directly in `<src folder>`/."
 
 | From \ to       | `app/` | same feature | other feature | `support/` | elsewhere in src |
 | --------------- | ------ | ------------ | ------------- | ---------- | ---------------- |

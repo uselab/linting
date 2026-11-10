@@ -128,7 +128,7 @@ describe('file location', () => {
   const locationMessages = (report: LintReport, file: string): Linter.LintMessage[] =>
     (report[file] ?? []).filter((message) => message.ruleId === LOCATION_RULE);
 
-  it.each(['src/main.ts', 'src/router/index.ts'])(
+  it.each(['src/main.ts', 'src/router/index.ts', 'src/router/types.d.ts'])(
     'reports %s outside app/, features/ and support/',
     async (file) => {
       const report = await lint();
