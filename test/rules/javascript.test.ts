@@ -188,9 +188,9 @@ describe('no-restricted-syntax', () => {
     expect(await lintRule(config, 'no-restricted-syntax')(FILE, code)).toHaveLength(1);
   });
 
-  it('reports class declarations', async () => {
+  it('allows class declarations', async () => {
     const code = 'export class A {}';
-    expect(await lintRule(config, 'no-restricted-syntax')(FILE, code)).toHaveLength(1);
+    expect(await lintRule(config, 'no-restricted-syntax')(FILE, code)).toEqual([]);
   });
 });
 

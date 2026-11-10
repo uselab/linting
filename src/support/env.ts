@@ -14,10 +14,6 @@ export const restrictedSyntaxEntries = [
     message:
       'Use undefined instead of null. If null is required by backend-generated types/contracts, add a single-line eslint exception with a short reason.',
   },
-  {
-    selector: 'ClassDeclaration',
-    message: 'Use arrow functions or factory functions instead of classes',
-  },
 ];
 
 export const restrictedSyntax: Rules[string] = ['error', ...restrictedSyntaxEntries];
