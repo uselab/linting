@@ -33,6 +33,11 @@ const PRESET_OPTIONS: { value: PresetId; label: string; hint: string }[] = [
   { value: 'typescript', label: 'typescript', hint: 'typescript-eslint for .ts/.tsx/.vue' },
   { value: 'prettier', label: 'prettier', hint: 'disables conflicting rules + .prettierrc.json' },
   { value: 'vue', label: 'vue', hint: 'eslint-plugin-vue + Vue house rules' },
+  {
+    value: 'vueA11y',
+    label: 'vueA11y',
+    hint: 'accessibility rules for Vue templates (needs vue; React support planned)',
+  },
   { value: 'react', label: 'react', hint: '@eslint-react + react-hooks' },
   {
     value: 'aliases',
@@ -352,6 +357,18 @@ export type AskOptions = {
   ignoresEditable?: boolean;
 };
 
+const warnAboutPresets = (presets: PresetId[]): void => {
+  if (!presets.includes('javascript')) {
+    clack.log.warn('The other presets build on `javascript`; you probably want to include it.');
+  }
+  if (presets.includes('vueA11y') && !presets.includes('vue')) {
+    clack.log.warn('`vueA11y` only checks .vue files; you probably want to include `vue`.');
+  }
+  if (presets.includes('vue') && presets.includes('react')) {
+    clack.log.warn('Both vue and react are selected. That is unusual, but allowed.');
+  }
+};
+
 /**
  * Asks the project type, the browser globs of a browser project, which presets to use, plus the
  * test file globs when javascript is selected, the boundaries options when boundaries is
@@ -380,12 +397,7 @@ export const askAnswers = async ({
     }),
   );
   const presets = orderPresets([...selected, ...environmentPresets(environment.type)]);
-  if (!presets.includes('javascript')) {
-    clack.log.warn('The other presets build on `javascript`; you probably want to include it.');
-  }
-  if (presets.includes('vue') && presets.includes('react')) {
-    clack.log.warn('Both vue and react are selected. That is unusual, but allowed.');
-  }
+  warnAboutPresets(presets);
   const javascript = presets.includes('javascript')
     ? await askJavascript(initialJavascript, detectedTestFiles)
     : undefined;

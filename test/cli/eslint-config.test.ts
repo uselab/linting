@@ -84,6 +84,11 @@ describe('readEslintConfig', () => {
     });
   });
 
+  it('reads the vueA11y preset', () => {
+    const text = generateEslintConfig({ presets: ['javascript', 'vue', 'vueA11y'] });
+    expect(readEslintConfig(text)?.presets).toEqual(['javascript', 'vue', 'vueA11y']);
+  });
+
   it('supports a renamed import and defineConfig([...])', () => {
     const text = [
       "import { defineConfig } from 'eslint/config';",

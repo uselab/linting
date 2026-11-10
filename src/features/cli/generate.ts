@@ -5,6 +5,7 @@ export type PresetId =
   | 'javascript'
   | 'typescript'
   | 'vue'
+  | 'vueA11y'
   | 'react'
   | 'browser'
   | 'node'
@@ -17,6 +18,7 @@ export const PRESET_ORDER: readonly PresetId[] = [
   'javascript',
   'typescript',
   'vue',
+  'vueA11y',
   'react',
   'browser',
   'node',

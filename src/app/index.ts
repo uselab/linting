@@ -8,6 +8,7 @@ import { prettier } from '../features/eslint-presets/prettier';
 import { react } from '../features/eslint-presets/react';
 import { typescript } from '../features/eslint-presets/typescript';
 import { vue } from '../features/eslint-presets/vue';
+import { vueA11yPreset } from '../features/eslint-presets/vue-a11y';
 import { templateStructurePlugin } from '../support/eslint-plugins/template-structure';
 
 /**
@@ -29,6 +30,7 @@ export const configs = {
   javascript,
   typescript,
   vue,
+  vueA11y: vueA11yPreset,
   react,
   browser,
   node,

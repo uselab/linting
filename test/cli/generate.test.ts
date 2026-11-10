@@ -66,6 +66,17 @@ describe('generateEslintConfig', () => {
     );
   });
 
+  it('places vueA11y right after vue', () => {
+    const config = generateEslintConfig({ presets: ['prettier', 'vueA11y', 'react', 'vue'] });
+    const spreadLines = config.split('\n').filter((line) => line.startsWith('  ...configs.'));
+    expect(spreadLines).toEqual([
+      '  ...configs.vue,',
+      '  ...configs.vueA11y,',
+      '  ...configs.react,',
+      '  ...configs.prettier,',
+    ]);
+  });
+
   it.each<[IgnoresAnswers | undefined, string[]]>([
     [undefined, []],
     [{ mode: 'all', globs: ['legacy/**'] }, []],
