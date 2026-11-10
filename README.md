@@ -281,4 +281,4 @@ Issues and pull requests are welcome. Run `npm test`, `npm run lint` and `npm ru
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © Uselab
