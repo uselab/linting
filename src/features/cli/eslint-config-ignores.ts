@@ -5,11 +5,7 @@ import { IGNORE_EVERYTHING, KEEP_TOOLING_FILES, type IgnoresAnswers } from './ge
 
 export const ALL_FILES: IgnoresAnswers = { mode: 'all', globs: [] };
 
-/** Former defaults, read like the current ones and dropped when the entry is rewritten. */
-const LEGACY_DEFAULT_IGNORES: readonly string[] = ['**/coverage/**'];
-
-const isDefaultIgnore = (pattern: string): boolean =>
-  DEFAULT_IGNORES.includes(pattern) || LEGACY_DEFAULT_IGNORES.includes(pattern);
+const isDefaultIgnore = (pattern: string): boolean => DEFAULT_IGNORES.includes(pattern);
 
 /**
  * Reads opt-in patterns (`'**\/*', '!**\/*\/', '!src/**', 'src/legacy/**'`) back to their globs:
@@ -42,20 +38,7 @@ const readScope = (patterns: string[]): IgnoresAnswers | undefined => {
   return { mode: 'exclude', globs: patterns };
 };
 
-/** Reads the legacy `ignores()` / `ignores([...])` with literal patterns into the lint scope. */
-export const readLegacyIgnores = (node: ASTNode): IgnoresAnswers | undefined => {
-  if (node.type !== 'CallExpression' || node.arguments.length > 1) {
-    return undefined;
-  }
-  const [argument] = node.arguments;
-  if (argument === undefined) {
-    return ALL_FILES;
-  }
-  const patterns = stringArray(argument);
-  return patterns === undefined ? undefined : readScope(patterns);
-};
-
-/** Reads `globalIgnores([...])` (and an optional name) with literal patterns into the lint scope. */
+/** Reads `globalIgnores([...])`` (and an optional name) with literal patterns into the lint scope. */
 export const readGlobalIgnores = (node: ASTNode): IgnoresAnswers | undefined => {
   if (node.type !== 'CallExpression' || node.arguments.length === 0 || node.arguments.length > 2) {
     return undefined;

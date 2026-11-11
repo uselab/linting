@@ -4,7 +4,7 @@ import { configs } from '@uselab/linting';
 export default [
   globalIgnores(['**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo']),
   ...configs.javascript(),
-  ...configs.typescript,
+  ...configs.typescript(),
   ...configs.node(),
   {
     // Small flat library without path aliases; the parent-import ban targets app code.
@@ -19,5 +19,5 @@ export default [
     },
   },
   ...configs.boundaries({ tsconfig: 'tsconfig.json' }),
-  ...configs.prettier,
+  ...configs.prettier(),
 ];

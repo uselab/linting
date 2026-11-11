@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import boundariesPlugin from 'eslint-plugin-boundaries';
 import { layoutPlugin, OUTSIDE_IMPORT_MESSAGE } from '../../support/eslint-plugins/layout';
-import { type Config } from '../../support/shared';
+import { scopeConfigs, type Config, type PresetOptions } from '../../support/shared';
 import {
   DEFAULT_SRC_DIRS,
   findSourceTsconfigs,
@@ -17,7 +17,7 @@ const typescriptResolverPath = createRequire(import.meta.url).resolve(
 
 const SOURCE_EXTENSIONS = '{js,mjs,cjs,jsx,ts,mts,cts,tsx,vue}';
 
-export type BoundariesOptions = {
+export type BoundariesOptions = PresetOptions & {
   /**
    * Source folders, relative to the directory ESLint runs in, that each contain the fixed
    * `app/`, `features/*` and `support/` layout. Default: `['src']`.
@@ -157,23 +157,29 @@ const assertNotNested = (srcDirs: string[]): void => {
 export const boundaries = (options: BoundariesOptions = {}): Config[] => {
   const srcDirs = (options.srcDirs ?? DEFAULT_SRC_DIRS).map(normalizeSrcDir);
   assertNotNested(srcDirs);
-  return [
-    {
-      name: 'uselab/boundaries',
-      files: srcDirs.map((srcDir) => `${escapeGlob(srcDir)}/**/*.${SOURCE_EXTENSIONS}`),
-      plugins: { boundaries: boundariesPlugin },
-      settings: {
-        'import/resolver': {
-          [typescriptResolverPath]: resolverOptions(srcDirs, options.tsconfig),
+  return scopeConfigs(
+    [
+      {
+        name: 'uselab/boundaries',
+        files: srcDirs.map((srcDir) => `${escapeGlob(srcDir)}/**/*.${SOURCE_EXTENSIONS}`),
+        plugins: { boundaries: boundariesPlugin },
+        settings: {
+          'import/resolver': {
+            [typescriptResolverPath]: resolverOptions(srcDirs, options.tsconfig),
+          },
+          'boundaries/elements': elementsFor(srcDirs),
+          'boundaries/include': srcDirs.map((srcDir) => `${escapeGlob(srcDir)}/**`),
         },
-        'boundaries/elements': elementsFor(srcDirs),
-        'boundaries/include': srcDirs.map((srcDir) => `${escapeGlob(srcDir)}/**`),
+        rules: {
+          'boundaries/dependencies': [
+            'error',
+            { default: 'allow', policies: policiesFor(srcDirs) },
+          ],
+        },
       },
-      rules: {
-        'boundaries/dependencies': ['error', { default: 'allow', policies: policiesFor(srcDirs) }],
-      },
-    },
-    ...srcDirs.map(fileLocationConfig),
-    ...srcDirs.map(importLocationConfig),
-  ];
+      ...srcDirs.map(fileLocationConfig),
+      ...srcDirs.map(importLocationConfig),
+    ],
+    options,
+  );
 };

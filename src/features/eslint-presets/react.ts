@@ -1,7 +1,7 @@
 import eslintReact from '@eslint-react/eslint-plugin';
 import reactHooks from 'eslint-plugin-react-hooks';
 import { restrictedDomSyntaxEntries, restrictedSyntaxEntries } from '../../support/env';
-import { JSX_FILES, type Config } from '../../support/shared';
+import { JSX_FILES, scopeConfigs, type Config, type PresetOptions } from '../../support/shared';
 
 // Hooks may live in plain .js/.ts files (e.g. use-something.ts), so React rules cover those too.
 const REACT_JS_FILES = ['**/*.{js,mjs,jsx}'];
@@ -29,7 +29,7 @@ const duplicateHookRules = Object.fromEntries(
  * React preset: @eslint-react recommended + react-hooks recommended + Uselab React house rules.
  * Components must be arrow functions (enforced by `func-style` in the javascript preset).
  */
-export const react: Config[] = [
+const reactConfigs: Config[] = [
   {
     ...eslintReact.configs.recommended,
     name: 'uselab/react/recommended',
@@ -67,3 +67,5 @@ export const react: Config[] = [
     },
   },
 ];
+
+export const react = (options: PresetOptions = {}): Config[] => scopeConfigs(reactConfigs, options);

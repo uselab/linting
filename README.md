@@ -49,7 +49,7 @@ An **Edit ESLint ignore configuration** row lets you change the `globalIgnores()
 
 ## Usage
 
-Spread the presets you need into `eslint.config.ts`, after the [global ignores](#ignores). **`configs.prettier` must be last.**
+Spread the presets you need into `eslint.config.ts`, after the [global ignores](#ignores). **`configs.prettier()` must be last.**
 
 ### Vue + TypeScript
 
@@ -60,33 +60,33 @@ import { configs } from '@uselab/linting';
 export default [
   globalIgnores(['**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo']),
   ...configs.javascript(),
-  ...configs.typescript,
-  ...configs.vue,
+  ...configs.typescript(),
+  ...configs.vue(),
   ...configs.browser({ files: ['src/**'] }), // browser globals for the app code
   ...configs.node({ ignores: ['src/**'] }), // Node globals for everything else
-  ...configs.aliases, // Vite resolves the path aliases
+  ...configs.aliases(), // Vite resolves the path aliases
   ...configs.boundaries({ tsconfig: 'tsconfig.app.json' }), // optional
-  ...configs.prettier,
+  ...configs.prettier(),
 ];
 ```
 
 ### React + TypeScript
 
-Same as Vue, with `...configs.react` instead of `...configs.vue` (and without `aliases` unless a bundler resolves them).
+Same as Vue, with `...configs.react()` instead of `...configs.vue()` (and without `aliases` unless a bundler resolves them).
 
 ### Node (TypeScript or JavaScript)
 
-Use `...configs.javascript()`, `...configs.typescript` (omit for plain JS), `...configs.node()` and `...configs.prettier`.
+Use `...configs.javascript()`, `...configs.typescript()` (omit for plain JS), `...configs.node()` and `...configs.prettier()`.
 
 ### Overriding rules
 
-Add your own config objects after the presets, before `configs.prettier`:
+Add your own config objects after the presets, before `configs.prettier()`:
 
 ```ts
 export default [
   ...configs.javascript(),
   { files: ['src/legacy/**'], rules: { complexity: 'off' } },
-  ...configs.prettier,
+  ...configs.prettier(),
 ];
 ```
 
@@ -107,19 +107,32 @@ Prettier loads TypeScript configs since 3.5 (Node 22.18+).
 
 ## Presets
 
-| Preset                 | Contents                                                                                                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `javascript(options?)` | ESLint, import-x, sonarjs and unicorn picks plus house rules (no `null`, kebab-case filenames, size limits, ...). Option: `testFiles`.                                         |
-| `typescript`           | `typescript-eslint` recommended, `type` over `interface`, inline type imports, no type assertions.                                                                             |
-| `vue`                  | `eslint-plugin-vue` recommended, house rules (block order, type-based props and emits, ...), `template-structure` rule.                                                        |
-| `vueA11y`              | `eslint-plugin-vuejs-accessibility` recommended. Opt-in in the config; the CLI preselects it when `vue` is detected.                                                           |
-| `react`                | `@eslint-react` and `react-hooks` recommended, no inline `style`, no `props.x` in JSX.                                                                                         |
-| `query(options?)`      | Server state via a query library: no `fetch`, no HTTP clients (axios, ky, ...) outside `allow`. Options: `library`, `allow`, `files`. See [Query libraries](#query-libraries). |
-| `browser(options?)`    | Browser globals and no imperative DOM mutation. Options: `files`, `ignores`.                                                                                                   |
-| `node(options?)`       | Node globals. Options: `files`, `ignores`; default: all files.                                                                                                                 |
-| `aliases`              | Bundler projects only: no `../x` imports; use [path aliases](#path-aliases).                                                                                                   |
-| `boundaries(options?)` | The fixed `app` / `features` / `support` [project structure](#project-structure-boundaries). Options: `srcDirs`, `tsconfig`.                                                   |
-| `prettier`             | `eslint-config-prettier`. Always last.                                                                                                                                         |
+| Preset                 | Contents                                                                                                                                                              |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `javascript(options?)` | ESLint, import-x, sonarjs and unicorn picks plus house rules (no `null`, kebab-case filenames, size limits, ...). Option: `testFiles`.                                |
+| `typescript(options?)` | `typescript-eslint` recommended, `type` over `interface`, inline type imports, no type assertions.                                                                    |
+| `vue(options?)`        | `eslint-plugin-vue` recommended, house rules (block order, type-based props and emits, ...), `template-structure` rule.                                               |
+| `vueA11y(options?)`    | `eslint-plugin-vuejs-accessibility` recommended. Opt-in in the config; the CLI preselects it when `vue` is detected.                                                  |
+| `react(options?)`      | `@eslint-react` and `react-hooks` recommended, no inline `style`, no `props.x` in JSX.                                                                                |
+| `query(options?)`      | Server state via a query library: no `fetch`, no HTTP clients (axios, ky, ...) outside `allow`. Options: `library`, `allow`. See [Query libraries](#query-libraries). |
+| `browser(options?)`    | Browser globals and no imperative DOM mutation.                                                                                                                       |
+| `node(options?)`       | Node globals.                                                                                                                                                         |
+| `aliases(options?)`    | Bundler projects only: no `../x` imports; use [path aliases](#path-aliases).                                                                                          |
+| `boundaries(options?)` | The fixed `app` / `features` / `support` [project structure](#project-structure-boundaries). Options: `srcDirs`, `tsconfig`.                                          |
+| `prettier(options?)`   | `eslint-config-prettier`. Always last.                                                                                                                                |
+
+### Options for all presets
+
+Every preset is a function and accepts the same base options (`PresetOptions`, exported from `@uselab/linting`). Presets with their own options extend it.
+
+| Option    | Meaning                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `files`   | Globs to restrict the preset to. They intersect with the files the preset targets itself (`browser`, `node` and `query` use them as scope). |
+| `ignores` | Globs the preset skips.                                                                                                                     |
+
+```ts
+configs.typescript({ files: ['src/**'], ignores: ['src/legacy/**'] });
+```
 
 ### Query libraries
 

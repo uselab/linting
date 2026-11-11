@@ -6,15 +6,13 @@ import {
   queryLibrary,
   type QueryLibraryId,
 } from '../../support/query-libraries';
-import { SOURCE_FILES, type Config } from '../../support/shared';
+import { SOURCE_FILES, type Config, type PresetOptions } from '../../support/shared';
 
-export type QueryOptions = {
+export type QueryOptions = PresetOptions & {
   /** The server-state library the messages point to. Default: a generic hint. */
   library?: QueryLibraryId;
   /** Globs where raw HTTP is allowed (the fetcher the query library calls). Default: `src/support/http/**`. */
   allow?: string[];
-  /** Globs the rules apply to. Default: all source files under `src/`. */
-  files?: string[];
 };
 
 const FETCH_GLOBALS = ['window', 'globalThis', 'self'];
@@ -27,7 +25,7 @@ const FETCH_GLOBALS = ['window', 'globalThis', 'self'];
  * `no-restricted-imports`, which doesn't clash with the aliases preset.
  */
 export const query = (options: QueryOptions = {}): Config[] => {
-  const { library, allow = DEFAULT_QUERY_ALLOW, files = SOURCE_FILES } = options;
+  const { library, allow = DEFAULT_QUERY_ALLOW, files = SOURCE_FILES, ignores = [] } = options;
   const hint = library === undefined ? 'a query library' : queryLibrary(library).usage;
   const fetchMessage = `Do not call fetch directly. Use ${hint}; raw HTTP belongs in ${allow.join(', ')}.`;
   const clientMessage = `Do not use HTTP client libraries. Use ${hint}; raw HTTP belongs in ${allow.join(', ')}.`;
@@ -35,7 +33,7 @@ export const query = (options: QueryOptions = {}): Config[] => {
     {
       name: 'uselab/query/no-raw-http',
       files,
-      ignores: allow,
+      ignores: [...allow, ...ignores],
       plugins: { '@typescript-eslint': tseslint.plugin },
       rules: {
         'no-restricted-globals': ['error', { name: 'fetch', message: fetchMessage }],

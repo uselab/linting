@@ -56,10 +56,10 @@ describe('generateEslintConfig', () => {
         ...DEFAULT_LINES,
         '  ]),',
         '  ...configs.javascript(),',
-        '  ...configs.typescript,',
-        '  ...configs.react,',
+        '  ...configs.typescript(),',
+        '  ...configs.react(),',
         '  ...configs.browser(),',
-        '  ...configs.prettier,',
+        '  ...configs.prettier(),',
         '];',
         '',
       ].join('\n'),
@@ -70,10 +70,10 @@ describe('generateEslintConfig', () => {
     const config = generateEslintConfig({ presets: ['prettier', 'vueA11y', 'react', 'vue'] });
     const spreadLines = config.split('\n').filter((line) => line.startsWith('  ...configs.'));
     expect(spreadLines).toEqual([
-      '  ...configs.vue,',
-      '  ...configs.vueA11y,',
-      '  ...configs.react,',
-      '  ...configs.prettier,',
+      '  ...configs.vue(),',
+      '  ...configs.vueA11y(),',
+      '  ...configs.react(),',
+      '  ...configs.prettier(),',
     ]);
   });
 

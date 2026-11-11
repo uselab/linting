@@ -498,9 +498,10 @@ describe('run init', () => {
       path.join(dir, 'eslint.config.js'),
       [
         "import { configs } from '@uselab/linting';",
+        "import { globalIgnores } from 'eslint/config';",
         '',
         'export default [',
-        '  ...configs.ignores(),',
+        '  globalIgnores([]),',
         '  ...configs.javascript(),',
         "  { rules: { 'no-console': 'off' } },",
         '];',
@@ -515,7 +516,7 @@ describe('run init', () => {
     expect(existsSync(path.join(dir, 'eslint.config.js'))).toBe(false);
     const config = read('eslint.config.ts');
     expect(config).toContain("{ rules: { 'no-console': 'off' } },");
-    expect(config).toContain('...configs.vue,');
+    expect(config).toContain('...configs.vue(),');
     const changes = findUncommittedChanges(dir);
     expect(changes.some((line) => /^[AR] {2}.*eslint\.config\.ts$/u.test(line))).toBe(true);
     expect(changes.some((line) => /^[DR] {2}eslint\.config\.js/u.test(line))).toBe(true);
@@ -527,9 +528,10 @@ describe('run init', () => {
       path.join(dir, 'eslint.config.ts'),
       [
         "import { configs } from '@uselab/linting';",
+        "import { globalIgnores } from 'eslint/config';",
         '',
         'export default [',
-        '  ...configs.ignores(),',
+        '  globalIgnores([]),',
         '  ...configs.javascript(),',
         "  { rules: { 'no-console': 'off' } },",
         '];',
@@ -543,10 +545,7 @@ describe('run init', () => {
 
     const config = read('eslint.config.ts');
     expect(config).toContain("{ rules: { 'no-console': 'off' } },");
-    expect(config).toContain('...configs.vue,');
-    expect(config).toContain("import { globalIgnores } from 'eslint/config';");
-    expect(config).toContain("  globalIgnores([\n    '**/dist/**',");
-    expect(config).not.toContain('configs.ignores');
+    expect(config).toContain('...configs.vue(),');
   });
 
   it('writes the chosen test file globs', async () => {
@@ -833,13 +832,14 @@ describe('run init lint scope', () => {
     );
   });
 
-  it('leaves non-literal configs.ignores() unchanged without asking', async () => {
+  it('leaves non-literal globalIgnores() unchanged without asking', async () => {
     const text = [
       "import { configs } from '@uselab/linting';",
-      "const legacy = ['legacy/**'];",
+      "import { globalIgnores } from 'eslint/config';",
+      "const skipped = ['legacy/**'];",
       '',
       'export default [',
-      '  ...configs.ignores(legacy),',
+      '  globalIgnores(skipped),',
       '  ...configs.javascript(),',
       "  ...configs.browser({ files: ['src/**'] }),",
       "  ...configs.node({ ignores: ['src/**'] }),",
@@ -852,7 +852,7 @@ describe('run init lint scope', () => {
     await initWithScope('exclude', 'other/**');
 
     expect(read(CONFIG)).toBe(text);
-    expect(answers.warnings.some((warning) => warning.includes('globalIgnores(['))).toBe(true);
+    expect(answers.warnings.some((warning) => warning.includes('globalIgnores()'))).toBe(true);
   });
 });
 
@@ -900,7 +900,7 @@ describe('run init environment', () => {
     expect(config).not.toContain('configs.browser');
   });
 
-  it('migrates the legacy spreads and preselects the existing environment', async () => {
+  it('preselects the existing environment', async () => {
     rmSync(path.join(dir, 'eslint.config.js'));
     writeFileSync(
       path.join(dir, CONFIG),
@@ -909,22 +909,16 @@ describe('run init environment', () => {
         '',
         'export default [',
         '  ...configs.javascript(),',
-        '  ...configs.browser,',
-        '  ...configs.node,',
+        "  ...configs.browser({ files: ['web/**'] }),",
+        "  ...configs.node({ ignores: ['web/**'] }),",
         '];',
         '',
       ].join('\n'),
     );
-    answers.browserFiles = 'web/**';
 
-    const migrated = await initEnvironment();
+    const existing = await initEnvironment();
 
-    expect(migrated).toContain("...configs.browser({ files: ['web/**'] }),");
-    expect(migrated).toContain("...configs.node({ ignores: ['web/**'] }),");
-
-    answers.browserFiles = undefined;
-    answers.environmentDefaults = [];
-    expect(await initEnvironment()).toBe(migrated);
+    expect(existing).toContain("...configs.browser({ files: ['web/**'] }),");
     expect(answers.environmentDefaults).toEqual(['browser', 'web/**']);
   });
 });

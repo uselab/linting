@@ -1,13 +1,13 @@
 import pluginVue from 'eslint-plugin-vue';
 import tseslint from 'typescript-eslint';
 import { templateStructurePlugin } from '../../support/eslint-plugins/template-structure';
-import { VUE_FILES, type Config } from '../../support/shared';
+import { scopeConfigs, VUE_FILES, type Config, type PresetOptions } from '../../support/shared';
 
 /**
  * Vue 3 preset: eslint-plugin-vue flat/recommended + Uselab Vue house rules and the custom
  * template-structure plugin. <script lang="ts"> is parsed with typescript-eslint's parser.
  */
-export const vue: Config[] = [
+const vueConfigs: Config[] = [
   ...pluginVue.configs['flat/recommended'],
   {
     name: 'uselab/vue/rules',
@@ -55,3 +55,5 @@ export const vue: Config[] = [
     },
   },
 ];
+
+export const vue = (options: PresetOptions = {}): Config[] => scopeConfigs(vueConfigs, options);
