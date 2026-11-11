@@ -108,7 +108,10 @@ const policiesFor = (srcDirs: string[]): Record<string, unknown>[] => [
 const resolverOptions = (srcDirs: string[], tsconfig: string | string[] | undefined): object => {
   const project =
     tsconfig ?? findSourceTsconfigs(process.cwd(), srcDirs).map((info) => info.absolutePath);
-  return project.length > 0 ? { project, alwaysTryTypes: true } : { alwaysTryTypes: true };
+  // One tsconfig per src dir is intentional, so the resolver's "multiple projects" warning is noise.
+  return project.length > 0
+    ? { project, alwaysTryTypes: true, noWarnOnMultipleProjects: true }
+    : { alwaysTryTypes: true };
 };
 
 /**

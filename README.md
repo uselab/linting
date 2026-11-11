@@ -112,7 +112,7 @@ Prettier loads TypeScript configs since 3.5 (Node 22.18+).
 | `javascript(options?)` | ESLint, import-x, sonarjs and unicorn picks plus house rules (no `null`, kebab-case filenames, size limits, ...). Option: `testFiles`.                                         |
 | `typescript`           | `typescript-eslint` recommended, `type` over `interface`, inline type imports, no type assertions.                                                                             |
 | `vue`                  | `eslint-plugin-vue` recommended, house rules (block order, type-based props and emits, ...), `template-structure` rule.                                                        |
-| `vueA11y`              | `eslint-plugin-vuejs-accessibility` recommended. Opt-in in the config; the CLI preselects it when `vue` is detected.                                                                                                           |
+| `vueA11y`              | `eslint-plugin-vuejs-accessibility` recommended. Opt-in in the config; the CLI preselects it when `vue` is detected.                                                           |
 | `react`                | `@eslint-react` and `react-hooks` recommended, no inline `style`, no `props.x` in JSX.                                                                                         |
 | `query(options?)`      | Server state via a query library: no `fetch`, no HTTP clients (axios, ky, ...) outside `allow`. Options: `library`, `allow`, `files`. See [Query libraries](#query-libraries). |
 | `browser(options?)`    | Browser globals and no imperative DOM mutation. Options: `files`, `ignores`.                                                                                                   |

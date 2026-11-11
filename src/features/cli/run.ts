@@ -99,7 +99,7 @@ const readPackageJson = (projectDir: string): ProjectPackage | undefined => {
   return { text, data: JSON.parse(text) };
 };
 
-const writeFile =  (tracked: TrackedFiles, file: string, content: string): void => {
+const writeFile = (tracked: TrackedFiles, file: string, content: string): void => {
   tracked.write(file, content);
   clack.log.success(`Wrote ${file}.`);
 };
