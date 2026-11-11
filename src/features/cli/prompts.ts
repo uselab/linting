@@ -190,18 +190,20 @@ const NO_QUERY = 'no';
 /** Asks which query library handles server state; undefined when the answer is "No". */
 const askQuery = async (
   presets: readonly PresetId[],
-  initial: QueryAnswers | undefined,
-  detected: QueryLibraryId | undefined,
-  wasEnabled: boolean,
+  previous: {
+    initial: QueryAnswers | undefined;
+    detected: QueryLibraryId | undefined;
+    wasEnabled: boolean;
+  },
 ): Promise<QueryAnswers | undefined> => {
+  const { initial, detected, wasEnabled } = previous;
   const libraries = queryLibraryOptions(presets);
   const preferred = [initial?.library, detected].find((id) =>
     libraries.some((library) => library.id === id),
   );
   const library = unwrap(
     await clack.select<QueryLibraryId | typeof NO_QUERY>({
-      message:
-        'Which library handles server state? (no fetch / axios outside src/support/http)',
+      message: 'Which library handles server state? (no fetch / axios outside src/support/http)',
       options: [
         { value: NO_QUERY, label: 'No' },
         ...libraries.map(({ id, label, framework }) => ({
@@ -464,12 +466,11 @@ export const askAnswers = async ({
   warnAboutPresets(basePresets);
   const query =
     basePresets.includes('vue') || basePresets.includes('react')
-      ? await askQuery(
-          basePresets,
-          initialQuery,
-          detectedQueryLibrary,
-          initialPresets.includes('query'),
-        )
+      ? await askQuery(basePresets, {
+          initial: initialQuery,
+          detected: detectedQueryLibrary,
+          wasEnabled: initialPresets.includes('query'),
+        })
       : undefined;
   const presets = query ? orderPresets([...basePresets, 'query']) : basePresets;
   const javascript = presets.includes('javascript')

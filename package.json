@@ -7,7 +7,7 @@
   "author": "Constantijn for Uselab",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/uselab/uselab-linting.git"
+    "url": "git+https://github.com/uselab/linting.git"
   },
   "publishConfig": {
     "access": "public",
