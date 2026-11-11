@@ -25,7 +25,7 @@ const CUSTOM_CONFIG = [
   "  { rules: { 'no-console': 'off' } },",
   '  ...local,',
   "  ...uselab.boundaries({ tsconfig: 'tsconfig.app.json' }),",
-  '  ...uselab.prettier,',
+  '  ...uselab.prettier(),',
   '];',
   '',
 ].join('\n');
@@ -67,21 +67,16 @@ describe('readEslintConfig', () => {
       presets: ['javascript', 'typescript', 'boundaries', 'prettier'],
       javascript: {},
       javascriptEditable: true,
-      javascriptLegacy: false,
       boundaries: {
         srcDirs: ['apps/web/src', 'apps/admin/src'],
         tsconfig: ['apps/web/tsconfig.json', 'apps/admin/tsconfig.json'],
       },
       boundariesEditable: true,
       queryEditable: true,
-      boundariesRemovedOptions: [],
       browserEditable: true,
-      browserLegacy: false,
       nodeEditable: true,
-      nodeLegacy: false,
       ignores: { mode: 'all', globs: [] },
       ignoresEditable: true,
-      ignoresLegacy: false,
     });
   });
 
@@ -126,17 +121,6 @@ describe('readEslintConfig', () => {
     expect(readEslintConfig(text)).toMatchObject({
       javascript: { testFiles: ['e2e/**', '**/*.test.ts'] },
       javascriptEditable: true,
-      javascriptLegacy: false,
-    });
-  });
-
-  it('marks the ...configs.javascript spread of older versions as legacy', () => {
-    const text =
-      "import { configs } from '@uselab/linting';\nexport default [...configs.javascript];";
-    expect(readEslintConfig(text)).toMatchObject({
-      javascript: {},
-      javascriptEditable: true,
-      javascriptLegacy: true,
     });
   });
 
@@ -170,10 +154,10 @@ describe('updateEslintConfig', () => {
     expect(spreads(update?.code)).toEqual([
       `globalIgnores([${DEFAULTS}]),`,
       '...uselab.javascript(),',
-      '...uselab.typescript,',
-      '...uselab.vue,',
+      '...uselab.typescript(),',
+      '...uselab.vue(),',
       '...uselab.node(),',
-      '...uselab.prettier,',
+      '...uselab.prettier(),',
     ]);
   });
 
@@ -200,8 +184,6 @@ describe('updateEslintConfig', () => {
       queryUpdated: false,
       globalsUpdated: [],
       ignoresUpdated: false,
-      ignoresMigrated: false,
-      boundariesRemovedOptions: [],
     });
   });
 
@@ -238,16 +220,6 @@ describe('updateEslintConfig', () => {
     expect(update?.javascriptUpdated).toBe(false);
   });
 
-  it('migrates the ...configs.javascript spread of older versions', () => {
-    const text = CUSTOM_CONFIG.replace('...uselab.javascript(),', '...uselab.javascript,');
-    const update = updateEslintConfig(text, {
-      presets: ['javascript', 'boundaries', 'prettier'],
-      boundaries: { tsconfig: 'tsconfig.app.json' },
-    });
-    expect(update?.javascriptUpdated).toBe(true);
-    expect(spreads(update?.code)).toContain('...uselab.javascript(),');
-  });
-
   it('leaves non-literal javascript options unchanged', () => {
     const text = CUSTOM_CONFIG.replace(
       '...uselab.javascript(),',
@@ -259,27 +231,6 @@ describe('updateEslintConfig', () => {
       boundaries: { tsconfig: 'tsconfig.app.json' },
     });
     expect(update).toMatchObject({ javascriptUpdated: false, code: text });
-  });
-
-  it('drops boundaries options that no longer exist', () => {
-    const text = CUSTOM_CONFIG.replace(
-      "boundaries({ tsconfig: 'tsconfig.app.json' })",
-      "boundaries({ tsconfig: 'tsconfig.app.json', include: ['src/**'], elements: [{ type: 'x' }] })",
-    );
-    expect(readEslintConfig(text)).toMatchObject({
-      boundaries: { tsconfig: 'tsconfig.app.json' },
-      boundariesEditable: true,
-      boundariesRemovedOptions: ['include', 'elements'],
-    });
-    const update = updateEslintConfig(text, {
-      presets: ['javascript', 'boundaries', 'prettier'],
-      boundaries: { tsconfig: 'tsconfig.app.json' },
-    });
-    expect(update).toMatchObject({
-      boundariesUpdated: true,
-      boundariesRemovedOptions: ['include', 'elements'],
-    });
-    expect(update?.code).toContain("...uselab.boundaries({ tsconfig: 'tsconfig.app.json' }),");
   });
 });
 
@@ -313,37 +264,6 @@ describe('browser() / node()', () => {
       nodeIgnores: undefined,
       environment: { type: 'node', browserFiles: [] },
     });
-  });
-
-  it('migrates the ...configs.browser / ...configs.node spreads of older versions', () => {
-    const text = [
-      "import { configs } from '@uselab/linting';",
-      'export default [',
-      '  ...configs.javascript(),',
-      '  ...configs.browser,',
-      '  ...configs.node,',
-      '];',
-    ].join('\n');
-    expect(readEslintConfig(text)).toMatchObject({
-      browserLegacy: true,
-      nodeLegacy: true,
-      environment: { type: 'browser', browserFiles: [] },
-    });
-    const update = updateEslintConfig(text, BROWSER);
-    expect(update?.globalsUpdated).toEqual(['browser', 'node']);
-    expect(spreads(update?.code)).toEqual(['...configs.javascript(),', ...BROWSER_SPREADS]);
-  });
-
-  it('migrates legacy spreads even when the project type is not asked', () => {
-    const text = [
-      "import { configs } from '@uselab/linting';",
-      'export default [',
-      '  ...configs.javascript(),',
-      '  ...configs.node,',
-      '];',
-    ].join('\n');
-    const update = updateEslintConfig(text, { presets: ['javascript', 'node'] });
-    expect(spreads(update?.code)).toEqual(['...configs.javascript(),', '...configs.node(),']);
   });
 
   it('rewrites changed browser globs', () => {
@@ -412,11 +332,7 @@ describe('globalIgnores()', () => {
       { mode: 'only', globs: ['src/**', '!src/legacy/**'] },
     ],
   ])('reads %s', (entry, ignores) => {
-    expect(readEslintConfig(withIgnores(entry))).toMatchObject({
-      ignores,
-      ignoresEditable: true,
-      ignoresLegacy: false,
-    });
+    expect(readEslintConfig(withIgnores(entry))).toMatchObject({ ignores, ignoresEditable: true });
   });
 
   it('reads a renamed globalIgnores import', () => {
@@ -460,7 +376,7 @@ describe('globalIgnores()', () => {
     ],
   ])('rewrites the lint scope %o', (ignores, expected) => {
     const update = updateEslintConfig(CUSTOM_CONFIG, { ...PRESETS, ...BOUNDARIES, ignores });
-    expect(update).toMatchObject({ ignoresUpdated: true, ignoresMigrated: false });
+    expect(update).toMatchObject({ ignoresUpdated: true });
     expect(spreads(update?.code)[0]).toBe(expected);
     expect(readEslintConfig(update?.code ?? '')?.ignores).toEqual(ignores);
   });
@@ -505,28 +421,6 @@ describe('globalIgnores()', () => {
     expect(update?.code).toBe(text);
   });
 
-  it.each<[string, IgnoresAnswers]>([
-    [`'legacy/**', ${DEFAULTS}, '**/coverage/**'`, { mode: 'exclude', globs: ['legacy/**'] }],
-    [
-      `'**/*', '!**/*/', '!*.{js,mjs,cjs,ts,mts,cts}', '!src/**', '**/dist/**', '**/coverage/**', '**/node_modules/**'`,
-      { mode: 'only', globs: ['src/**'] },
-    ],
-  ])('reads the former **/coverage/** default as a default in %s', (patterns, ignores) => {
-    const text = withIgnores(`globalIgnores([${patterns}]),`);
-    expect(readEslintConfig(text)).toMatchObject({ ignores, ignoresEditable: true });
-    expect(updateEslintConfig(text, { ...PRESETS, ...BOUNDARIES, ignores })?.code).toBe(text);
-  });
-
-  it('drops the former **/coverage/** default when rewriting the scope', () => {
-    const text = withIgnores(`globalIgnores(['legacy/**', '**/coverage/**', ${DEFAULTS}]),`);
-    const update = updateEslintConfig(text, {
-      ...PRESETS,
-      ...BOUNDARIES,
-      ignores: { mode: 'exclude', globs: ['other/**'] },
-    });
-    expect(spreads(update?.code)[0]).toBe(`globalIgnores(['other/**', ${DEFAULTS}]),`);
-  });
-
   it('inserts globalIgnores() and its import at the top when it is missing', () => {
     const text = CUSTOM_CONFIG.replace(`  ${DEFAULT_ENTRY}\n`, '').replace(
       "import { globalIgnores } from 'eslint/config';\n",
@@ -557,7 +451,7 @@ describe('updateEslintIgnores', () => {
       `globalIgnores(['legacy/**', ${DEFAULTS}]),`,
       '...uselab.javascript(),',
       "...uselab.boundaries({ tsconfig: 'tsconfig.app.json' }),",
-      '...uselab.prettier,',
+      '...uselab.prettier(),',
     ]);
     expect(update?.code).toContain('...local,');
     expect(readEslintConfig(update?.code ?? '')?.ignores).toEqual(ignores);
@@ -585,58 +479,5 @@ describe('updateEslintIgnores', () => {
     const text = CUSTOM_CONFIG.replace(DEFAULT_ENTRY, 'globalIgnores(patterns),');
     expect(updateEslintIgnores(text, ignores)).toBeUndefined();
     expect(updateEslintIgnores('export default [];\n', ignores)).toBeUndefined();
-  });
-});
-
-describe('legacy configs.ignores()', () => {
-  const PRESETS: { presets: PresetId[] } = { presets: ['javascript', 'boundaries', 'prettier'] };
-  const BOUNDARIES = { boundaries: { tsconfig: 'tsconfig.app.json' } };
-  const withLegacy = (args: string): string =>
-    CUSTOM_CONFIG.replace("import { globalIgnores } from 'eslint/config';\n", '').replace(
-      `globalIgnores([${DEFAULTS}]),`,
-      `...uselab.ignores(${args}),`,
-    );
-
-  it.each<[string, IgnoresAnswers]>([
-    ['', { mode: 'all', globs: [] }],
-    ['[]', { mode: 'all', globs: [] }],
-    ["['legacy/**', 'src/old/**']", { mode: 'exclude', globs: ['legacy/**', 'src/old/**'] }],
-    [
-      "['**/*', '!**/*/', '!*.{js,mjs,cjs,ts,mts,cts}', '!src/**', '!test/**']",
-      { mode: 'only', globs: ['src/**', 'test/**'] },
-    ],
-  ])('reads ignores(%s) and migrates it to globalIgnores()', (args, ignores) => {
-    const text = withLegacy(args);
-    expect(readEslintConfig(text)).toMatchObject({
-      ignores,
-      ignoresEditable: true,
-      ignoresLegacy: true,
-    });
-    const update = updateEslintConfig(text, { ...PRESETS, ...BOUNDARIES, ignores });
-    expect(update).toMatchObject({ ignoresUpdated: true, ignoresMigrated: true });
-    expect(update?.code).toContain("import { globalIgnores } from 'eslint/config';");
-    expect(update?.code).not.toContain('uselab.ignores');
-    expect(readEslintConfig(update?.code ?? '')).toMatchObject({ ignores, ignoresLegacy: false });
-  });
-
-  it('migrates when the scope is not asked', () => {
-    const update = updateEslintConfig(withLegacy("['legacy/**']"), { ...PRESETS, ...BOUNDARIES });
-    expect(update?.ignoresMigrated).toBe(true);
-    expect(spreads(update?.code)[0]).toBe(`globalIgnores(['legacy/**', ${DEFAULTS}]),`);
-  });
-
-  it('leaves non-literal ignores() unchanged', () => {
-    const text = withLegacy('patterns');
-    expect(readEslintConfig(text)).toMatchObject({
-      ignoresEditable: false,
-      ignoresLegacy: true,
-    });
-    expect(
-      updateEslintConfig(text, {
-        ...PRESETS,
-        ...BOUNDARIES,
-        ignores: { mode: 'exclude', globs: ['legacy/**'] },
-      }),
-    ).toMatchObject({ ignoresUpdated: false, code: text });
   });
 });

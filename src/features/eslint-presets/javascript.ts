@@ -4,7 +4,14 @@ import sonarjs from 'eslint-plugin-sonarjs';
 import unicorn from 'eslint-plugin-unicorn';
 import globals from 'globals';
 import { devSeverity, restrictedSyntax } from '../../support/env';
-import { ROOT_TOOLING_FILES, TEST_FILES, type Config, type Rules } from '../../support/shared';
+import {
+  ROOT_TOOLING_FILES,
+  scopeConfigs,
+  TEST_FILES,
+  type Config,
+  type PresetOptions,
+  type Rules,
+} from '../../support/shared';
 
 const houseRules: Rules = {
   'no-alert': 'error',
@@ -45,7 +52,7 @@ const houseRules: Rules = {
   'unicorn/prefer-structured-clone': 'error',
 };
 
-export type JavaScriptOptions = {
+export type JavaScriptOptions = PresetOptions & {
   /**
    * Globs of test files, which get relaxed rules (no `max-lines` / `max-lines-per-function`).
    * Default: `test/**`. Pass `[]` when the project has no test files.
@@ -66,51 +73,54 @@ const devRules: Rules = {
  */
 export const javascript = (options: JavaScriptOptions = {}): Config[] => {
   const testFiles = options.testFiles ?? TEST_FILES;
-  return [
-    { name: 'uselab/javascript/recommended', ...js.configs.recommended },
-    { ...importX.flatConfigs.recommended, name: 'uselab/javascript/import-x' },
-    {
-      name: 'uselab/javascript/rules',
-      plugins: { sonarjs, unicorn },
-      rules: { ...houseRules, ...devRules },
-    },
-    {
-      name: 'uselab/javascript/commonjs',
-      files: ['**/*.cjs'],
-      languageOptions: {
-        sourceType: 'commonjs',
-        globals: { ...globals.node },
+  return scopeConfigs(
+    [
+      { name: 'uselab/javascript/recommended', ...js.configs.recommended },
+      { ...importX.flatConfigs.recommended, name: 'uselab/javascript/import-x' },
+      {
+        name: 'uselab/javascript/rules',
+        plugins: { sonarjs, unicorn },
+        rules: { ...houseRules, ...devRules },
       },
-    },
-    {
-      name: 'uselab/javascript/tooling-files',
-      files: ROOT_TOOLING_FILES,
-      languageOptions: {
-        globals: { ...globals.node },
+      {
+        name: 'uselab/javascript/commonjs',
+        files: ['**/*.cjs'],
+        languageOptions: {
+          sourceType: 'commonjs',
+          globals: { ...globals.node },
+        },
       },
-      rules: {
-        'no-console': 'off',
+      {
+        name: 'uselab/javascript/tooling-files',
+        files: ROOT_TOOLING_FILES,
+        languageOptions: {
+          globals: { ...globals.node },
+        },
+        rules: {
+          'no-console': 'off',
+        },
       },
-    },
-    // ESLint rejects an empty `files` array, so there is no tests block without test files.
-    ...(testFiles.length === 0
-      ? []
-      : [
-          {
-            name: 'uselab/javascript/tests',
-            files: testFiles,
-            rules: {
-              'max-lines': 'off',
-              'max-lines-per-function': 'off',
+      // ESLint rejects an empty `files` array, so there is no tests block without test files.
+      ...((testFiles.length === 0
+        ? []
+        : [
+            {
+              name: 'uselab/javascript/tests',
+              files: testFiles,
+              rules: {
+                'max-lines': 'off',
+                'max-lines-per-function': 'off',
+              },
             },
-          } satisfies Config,
-        ]),
-    {
-      name: 'uselab/javascript/eslint-config',
-      files: ['eslint.config.*'],
-      rules: {
-        'max-lines': 'off',
+          ]) satisfies Config[]),
+      {
+        name: 'uselab/javascript/eslint-config',
+        files: ['eslint.config.*'],
+        rules: {
+          'max-lines': 'off',
+        },
       },
-    },
-  ];
+    ],
+    options,
+  );
 };

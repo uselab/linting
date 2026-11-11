@@ -50,7 +50,7 @@ describe('query preset', () => {
 
   it('does not clash with the aliases preset', async () => {
     const messages = await lintSnippet(
-      [...configs.aliases, ...configs.query(), ...configs.node()],
+      [...configs.aliases(), ...configs.query(), ...configs.node()],
       'src/a.js',
       "import axios from 'axios';\nimport b from '../b';",
     );

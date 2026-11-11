@@ -162,14 +162,7 @@ const warnConfigUpdate = (configFile: string, answers: InitAnswers, update: Conf
   }
   if (updated?.ignoresEditable === false) {
     clack.log.warn(
-      updated.ignoresLegacy
-        ? `configs.ignores() no longer exists and its patterns in ${configFile} aren't literals; replace it by globalIgnores([...]) from 'eslint/config'.`
-        : `The globalIgnores() patterns in ${configFile} aren't literals or mix opt-in and opt-out; left unchanged.`,
-    );
-  }
-  if (update.boundariesRemovedOptions.length > 0) {
-    clack.log.warn(
-      `Removed boundaries() options that no longer exist from ${configFile}: ${update.boundariesRemovedOptions.join(', ')}. The project structure (app / features / support, guided by the principles of Domain-Driven Design) is fixed; use srcDirs for the src folders.`,
+      `The globalIgnores() patterns in ${configFile} aren't literals or mix opt-in and opt-out; left unchanged.`,
     );
   }
 };
@@ -181,8 +174,7 @@ const describeChanges = (update: ConfigUpdate): string[] => [
   ...(update.boundariesUpdated ? ['~ boundaries options'] : []),
   ...(update.queryUpdated ? ['~ query()'] : []),
   ...update.globalsUpdated.map((preset) => `~ ${preset}()`),
-  ...(update.ignoresMigrated ? ['~ configs.ignores() → globalIgnores()'] : []),
-  ...(update.ignoresUpdated && !update.ignoresMigrated ? ['~ globalIgnores()'] : []),
+  ...(update.ignoresUpdated ? ['~ globalIgnores()'] : []),
 ];
 
 /**

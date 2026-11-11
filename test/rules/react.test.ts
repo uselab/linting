@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { configs } from '../../src/app';
 import { byRule, configForFile, lintRule, lintSnippet, severityOf } from '../helpers';
 
-const config = [...configs.javascript(), ...configs.typescript, ...configs.react];
+const config = [...configs.javascript(), ...configs.typescript(), ...configs.react()];
 const FILE = 'src/components/user-card.tsx';
 
 describe('no-restricted-syntax in JSX files', () => {

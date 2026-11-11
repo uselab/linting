@@ -4,17 +4,16 @@ import {
   restrictedDomSyntaxEntries,
   restrictedSyntaxEntries,
 } from '../../support/env';
-import { JSX_FILES, scope, SOURCE_FILES, type Config } from '../../support/shared';
+import {
+  JSX_FILES,
+  scope,
+  SOURCE_FILES,
+  type Config,
+  type PresetOptions,
+} from '../../support/shared';
 
-export type BrowserOptions = {
-  /**
-   * Globs of the browser files, which get the browser globals and the UI enforcement rules.
-   * Default: browser globals for all files and the UI enforcement rules for `src/`.
-   */
-  files?: string[];
-  /** Globs of files that don't get the browser globals and rules. */
-  ignores?: string[];
-};
+/** `files` are the browser files (default: globals for all files, UI rules for `src/`). */
+export type BrowserOptions = PresetOptions;
 
 /**
  * Browser preset: browser globals + UI enforcement rules (no imperative DOM class/attribute

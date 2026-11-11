@@ -20,8 +20,8 @@ const lint = async (
   process.chdir(fixturePath(fixture));
   return lintFixture(fixture, [
     ...configs.javascript(),
-    ...configs.typescript,
-    ...(aliases ? configs.aliases : []),
+    ...configs.typescript(),
+    ...(aliases ? configs.aliases() : []),
     ...configs.boundaries(options),
   ]);
 };

@@ -2,7 +2,14 @@ import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescrip
 import { importX } from 'eslint-plugin-import-x';
 import tseslint from 'typescript-eslint';
 import { devSeverity } from '../../support/env';
-import { ROOT_TOOLING_FILES, TS_FILES, VUE_FILES, type Config } from '../../support/shared';
+import {
+  ROOT_TOOLING_FILES,
+  scopeConfigs,
+  TS_FILES,
+  VUE_FILES,
+  type Config,
+  type PresetOptions,
+} from '../../support/shared';
 
 const TS_AND_VUE_FILES = [...TS_FILES, ...VUE_FILES];
 
@@ -20,7 +27,7 @@ const importXTypescriptSettings = Object.fromEntries(
  * TypeScript preset: typescript-eslint recommended + Uselab TS house rules.
  * Applies to .ts/.tsx/.mts/.cts and .vue files (for <script lang="ts">).
  */
-export const typescript: Config[] = [
+const typescriptConfigs: Config[] = [
   {
     name: 'uselab/typescript/plugin',
     plugins: { '@typescript-eslint': tseslint.plugin },
@@ -74,3 +81,6 @@ export const typescript: Config[] = [
     },
   },
 ];
+
+export const typescript = (options: PresetOptions = {}): Config[] =>
+  scopeConfigs(typescriptConfigs, options);

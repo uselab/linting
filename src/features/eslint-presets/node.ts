@@ -1,12 +1,8 @@
 import globals from 'globals';
-import { scope, type Config } from '../../support/shared';
+import { scope, type Config, type PresetOptions } from '../../support/shared';
 
-export type NodeOptions = {
-  /** Globs of the Node files. Default: all files. */
-  files?: string[];
-  /** Globs of files that don't get the Node globals, e.g. the browser files. */
-  ignores?: string[];
-};
+/** `files` are the Node files (default: all files); `ignores` e.g. the browser files. */
+export type NodeOptions = PresetOptions;
 
 /**
  * Node preset: Node.js globals, for all files by default. Use for backends, CLIs and libraries,

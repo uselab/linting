@@ -8,7 +8,7 @@ export default [
   {
     rules: { 'no-var': 'error' },
   },
-  ...configs.prettier,
+  ...configs.prettier(),
 ];
 `;
 
@@ -29,7 +29,7 @@ export default [
       complexity: 'off',
     },
   },
-  ...configs.prettier,
+  ...configs.prettier(),
 ];
 `);
   });

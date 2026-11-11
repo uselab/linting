@@ -231,7 +231,7 @@ const ignoresLines = (answers: IgnoresAnswers | undefined): string[] =>
   `${ignoresExpression(answers)},`.split('\n').map((line) => `  ${line}`);
 
 /**
- * Expression of a preset, e.g. `configs.typescript`, `configs.javascript({ ... })` or
+ * Expression of a preset, e.g. `configs.typescript()`, `configs.javascript({ ... })` or
  * `configs.boundaries({ ... })`.
  */
 export const presetExpression = (
@@ -252,7 +252,7 @@ export const presetExpression = (
     const options = globsOptions(GLOBALS_OPTION_KEYS[preset], browserGlobs(answers.environment));
     return `${local}.${preset}(${options})`;
   }
-  return `${local}.${preset}`;
+  return `${local}.${preset}()`;
 };
 
 /** Returns the presets in the canonical order, without duplicates. */

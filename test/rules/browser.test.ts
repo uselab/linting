@@ -40,11 +40,11 @@ describe('classList mutation (no-restricted-syntax)', () => {
   const orders: [string, Config[]][] = [
     [
       'browser before react',
-      [...configs.javascript(), ...configs.typescript, ...configs.browser(), ...configs.react],
+      [...configs.javascript(), ...configs.typescript(), ...configs.browser(), ...configs.react()],
     ],
     [
       'browser after react',
-      [...configs.javascript(), ...configs.typescript, ...configs.react, ...configs.browser()],
+      [...configs.javascript(), ...configs.typescript(), ...configs.react(), ...configs.browser()],
     ],
   ];
 
@@ -72,8 +72,8 @@ describe('no-restricted-properties', () => {
         : "document.body.setAttribute('a', 'b');";
       const full = [
         ...configs.javascript(),
-        ...configs.typescript,
-        ...configs.vue,
+        ...configs.typescript(),
+        ...configs.vue(),
         ...configs.browser(),
       ];
       expect(await lintRule(full, rule)(file, code)).toHaveLength(1);
