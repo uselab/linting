@@ -70,6 +70,7 @@ import { updateSourceTsconfigs, updateViteConfig } from './aliases';
 import { runAnalyze } from './analyze';
 import { offerAnalyze } from './analyze-offer';
 import { isInstalledOutdated } from './install';
+import { ownVersion } from './own-version';
 
 export const USAGE = `Usage: uselab-linting init [dir]
        uselab-linting analyze [dir]
@@ -98,20 +99,7 @@ const readPackageJson = (projectDir: string): ProjectPackage | undefined => {
   return { text, data: JSON.parse(text) };
 };
 
-const ownVersion = (): string => {
-  for (const candidate of ['../package.json', '../../../package.json']) {
-    const file = new URL(candidate, import.meta.url);
-    if (existsSync(file)) {
-      const data: { name?: string; version?: string } = JSON.parse(readFileSync(file, 'utf8'));
-      if (data.name === '@uselab/linting' && data.version) {
-        return data.version;
-      }
-    }
-  }
-  return '1.0.0';
-};
-
-const writeFile = (tracked: TrackedFiles, file: string, content: string): void => {
+const writeFile =  (tracked: TrackedFiles, file: string, content: string): void => {
   tracked.write(file, content);
   clack.log.success(`Wrote ${file}.`);
 };
@@ -159,6 +147,7 @@ const findExistingEslintConfig = (projectDir: string): ExistingEslintConfig | un
 const EDITABLE_PRESETS: { preset: PresetId; editable: keyof ExistingConfig }[] = [
   { preset: 'javascript', editable: 'javascriptEditable' },
   { preset: 'boundaries', editable: 'boundariesEditable' },
+  { preset: 'query', editable: 'queryEditable' },
   { preset: 'browser', editable: 'browserEditable' },
   { preset: 'node', editable: 'nodeEditable' },
 ];
@@ -185,6 +174,17 @@ const warnConfigUpdate = (configFile: string, answers: InitAnswers, update: Conf
   }
 };
 
+const describeChanges = (update: ConfigUpdate): string[] => [
+  ...update.added.map((preset) => `+ ${preset}`),
+  ...update.removed.map((preset) => `- ${preset}`),
+  ...(update.javascriptUpdated ? ['~ javascript()'] : []),
+  ...(update.boundariesUpdated ? ['~ boundaries options'] : []),
+  ...(update.queryUpdated ? ['~ query()'] : []),
+  ...update.globalsUpdated.map((preset) => `~ ${preset}()`),
+  ...(update.ignoresMigrated ? ['~ configs.ignores() → globalIgnores()'] : []),
+  ...(update.ignoresUpdated && !update.ignoresMigrated ? ['~ globalIgnores()'] : []),
+];
+
 /**
  * Updates an existing `@uselab/linting` config in place, keeping custom entries. Returns false
  * when the file isn't such a config (so it should be written from scratch instead).
@@ -201,15 +201,7 @@ const updateExistingEslintConfig = (
     return false;
   }
   warnConfigUpdate(configFile, answers, update);
-  const changes = [
-    ...update.added.map((preset) => `+ ${preset}`),
-    ...update.removed.map((preset) => `- ${preset}`),
-    ...(update.javascriptUpdated ? ['~ javascript()'] : []),
-    ...(update.boundariesUpdated ? ['~ boundaries options'] : []),
-    ...update.globalsUpdated.map((preset) => `~ ${preset}()`),
-    ...(update.ignoresMigrated ? ['~ configs.ignores() → globalIgnores()'] : []),
-    ...(update.ignoresUpdated && !update.ignoresMigrated ? ['~ globalIgnores()'] : []),
-  ];
+  const changes = describeChanges(update);
   if (changes.length === 0) {
     clack.log.info(`${configFile} already uses the selected presets.`);
     return true;
@@ -427,6 +419,8 @@ const installStep = (
   return dependencies || removedPackages ? 'npm install' : undefined;
 };
 
+const queryLibraryOf = (answers: InitAnswers) => answers.query?.library;
+
 const init = async (projectDir: string): Promise<void> => {
   clack.log.info(`Target: ${projectDir}`);
   const project = readPackageJson(projectDir);
@@ -469,6 +463,7 @@ const init = async (projectDir: string): Promise<void> => {
   const requirements = requiredDependencies(answers.presets, ownVersion(), {
     nodeTypes,
     viteChecker,
+    queryLibrary: queryLibraryOf(answers),
   });
   const dependencies = updateDependencies(projectDir, requirements, readPackageJson(projectDir));
   updateScripts(projectDir, answers, readPackageJson(projectDir));
@@ -497,7 +492,7 @@ const runInit = async (dir: string | undefined): Promise<void> => {
     fail(gitError);
     return;
   }
-  clack.intro('@uselab/linting');
+  clack.intro(`@uselab/linting@${ownVersion()}`);
   await init(projectDir);
 };
 

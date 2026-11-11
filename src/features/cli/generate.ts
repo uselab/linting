@@ -1,4 +1,5 @@
 import { DEFAULT_IGNORES } from '../../support/ignores';
+import { DEFAULT_QUERY_ALLOW, type QueryLibraryId } from '../../support/query-libraries';
 import { ROOT_TOOLING_FILES, TEST_FILES } from '../../support/shared';
 
 export type PresetId =
@@ -7,6 +8,7 @@ export type PresetId =
   | 'vue'
   | 'vueA11y'
   | 'react'
+  | 'query'
   | 'browser'
   | 'node'
   | 'aliases'
@@ -20,6 +22,7 @@ export const PRESET_ORDER: readonly PresetId[] = [
   'vue',
   'vueA11y',
   'react',
+  'query',
   'browser',
   'aliases',
   'node',
@@ -60,8 +63,15 @@ export type EnvironmentAnswers = {
   browserFiles: string[];
 };
 
+export type QueryAnswers = {
+  library?: QueryLibraryId;
+  /** Globs where raw HTTP is allowed; the default when undefined. */
+  allow?: string[];
+};
+
 export type InitAnswers = {
   presets: PresetId[];
+  query?: QueryAnswers;
   javascript?: JavaScriptAnswers;
   boundaries?: BoundariesAnswers;
   /** Project type; `browser()` / `node()` cover all files when undefined. */
@@ -163,6 +173,21 @@ const javascriptOptions = (answers: JavaScriptAnswers = {}): string =>
     ? ''
     : `{ testFiles: ${stringOrArray(answers.testFiles)} }`;
 
+/** Whether the allow globs are the default ones (or not set). */
+export const isDefaultQueryAllow = (allow: readonly string[] | undefined): boolean =>
+  allow === undefined || sameList(allow, DEFAULT_QUERY_ALLOW);
+
+const queryOptions = (answers: QueryAnswers = {}): string => {
+  const entries: string[] = [];
+  if (answers.library !== undefined) {
+    entries.push(`library: ${quote(answers.library)}`);
+  }
+  if (!isDefaultQueryAllow(answers.allow)) {
+    entries.push(`allow: ${stringOrArray(answers.allow ?? [])}`);
+  }
+  return entries.length > 0 ? `{ ${entries.join(', ')} }` : '';
+};
+
 /** `{ key: [...] }`, or nothing without globs. */
 export const globsOptions = (key: string, globs: readonly string[] | undefined): string =>
   globs === undefined || globs.length === 0 ? '' : `{ ${key}: ${stringOrArray([...globs])} }`;
@@ -216,6 +241,9 @@ export const presetExpression = (
 ): string => {
   if (preset === 'boundaries') {
     return `${local}.boundaries(${boundariesOptions(answers.boundaries)})`;
+  }
+  if (preset === 'query') {
+    return `${local}.query(${queryOptions(answers.query)})`;
   }
   if (preset === 'javascript') {
     return `${local}.javascript(${javascriptOptions(answers.javascript)})`;

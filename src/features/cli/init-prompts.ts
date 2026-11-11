@@ -58,6 +58,8 @@ export const askPresets = async (
     detectedTestFiles,
     initialJavascript: existing?.config.javascript,
     initialBoundaries: existing?.config.boundaries,
+    initialQuery: existing?.config.query,
+    detectedQueryLibrary: detection.queryLibrary,
     initialIgnores: existing?.config.ignores,
     ignoresEditable: existing?.config.ignoresEditable ?? true,
   });

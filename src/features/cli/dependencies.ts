@@ -1,3 +1,4 @@
+import { queryLibrary, type QueryLibraryId } from '../../support/query-libraries';
 import type { PresetId } from './generate';
 import { applyJsonChanges } from './json-edit';
 
@@ -8,6 +9,8 @@ export type Requirement = {
   /** Range written to package.json when the dependency is added or updated. */
   range: string;
   reason: string;
+  /** Runtime package: added to `dependencies` instead of `devDependencies` when missing. */
+  runtime?: boolean;
 };
 
 export type DependencyStatus = 'ok' | 'missing' | 'outdated' | 'unverifiable';
@@ -31,6 +34,8 @@ export type DependencyOptions = {
   nodeTypes?: string;
   /** Whether vite-plugin-checker is used in the Vite config. */
   viteChecker?: boolean;
+  /** The query library of the `query` preset; its packages are added as runtime dependencies. */
+  queryLibrary?: QueryLibraryId;
 };
 
 const DEFAULT_NODE_TYPES_MAJOR = 24;
@@ -43,6 +48,9 @@ export const setModuleType = (text: string): string =>
   applyJsonChanges(text, [
     { path: ['type'], value: 'module', insertAfter: ['name', 'version', 'private', 'description'] },
   ]);
+
+/** The lower bound of a simple range as `x.y.z` (`^5.0.0` → `5.0.0`). */
+const minimumVersionOf = (range: string): string => minimumOfRange(range)?.join('.') ?? '0.0.0';
 
 /** Packages the generated config needs. A TypeScript ESLint config needs ESLint's TS support + jiti. */
 export const requiredDependencies = (
@@ -88,6 +96,18 @@ export const requiredDependencies = (
         reason: 'type-checks .vue files',
       });
     }
+  }
+  if (presets.includes('query') && options.queryLibrary) {
+    const library = queryLibrary(options.queryLibrary);
+    requirements.push(
+      ...library.packages.map(({ name, range }) => ({
+        name,
+        minVersion: minimumVersionOf(range),
+        range,
+        reason: `query preset (${library.label})`,
+        runtime: true,
+      })),
+    );
   }
   if (options.viteChecker) {
     requirements.push({
@@ -169,7 +189,8 @@ export const checkDependencies = (
     return {
       ...requirement,
       declared,
-      field: inDependencies === undefined ? 'devDependencies' : 'dependencies',
+      field:
+        inDependencies === undefined && !requirement.runtime ? 'devDependencies' : 'dependencies',
       status: statusOf(declared, requirement.minVersion),
     };
   });

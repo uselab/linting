@@ -4,6 +4,7 @@ import { styleText } from 'node:util';
 import * as clack from '@clack/prompts';
 import type { ESLint, Linter } from 'eslint';
 import { DDD_REFERENCE, dddSectionLines, isBoundaryRule } from './ddd-section';
+import { ownVersion } from './own-version';
 import { confirm } from './prompts';
 import { applyRuleActions } from './rule-actions';
 import type { RuleChoice } from './rule-actions-prompt';
@@ -426,7 +427,7 @@ export const runAnalyze = async (
     return;
   }
   if (interactive && intro) {
-    clack.intro('@uselab/linting analyze');
+    clack.intro(`@uselab/linting@${ownVersion()} analyze`);
   }
   const excludeFixable = interactive && (await confirm('Exclude auto-fixable errors/warnings?'));
   let run = 0;

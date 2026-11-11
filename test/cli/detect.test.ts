@@ -59,6 +59,8 @@ describe('detectPresets', () => {
       'javascript',
       'typescript',
       'vue',
+      'vueA11y',
+      'query',
       'aliases',
       'boundaries',
       'prettier',
@@ -75,7 +77,7 @@ describe('detectPresets', () => {
       { dependencies: { next: '^15.0.0' } },
       undefined,
     );
-    expect(presets).toEqual(['javascript', 'react', 'aliases', 'boundaries']);
+    expect(presets).toEqual(['javascript', 'react', 'query', 'aliases', 'boundaries']);
     expect(projectType).toBe('browser');
   });
 
