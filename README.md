@@ -308,7 +308,13 @@ Undo with `npm unlink @uselab/linting` in the test project and `npm unlink -g @u
 
 Tests live in `test/` (`cli`, `plugins`, `rules`, `presets`, `prettier.test.ts`). House rules without options and imported rule sets are deliberately not tested in depth.
 
-Publishing: create a GitHub release; the `Publish` workflow publishes to npm with provenance (needs the `NPM_TOKEN` repository secret).
+`npm install` also sets up a `pre-push` git hook (via `simple-git-hooks`) that runs `npm run quality` (build, typecheck, lint and tests) before every `git push`, aborting the push if any of them fail.
+
+### Publishing a new version
+
+1. `npm version patch` (or `minor` / `major`) — runs `npm run quality` first (aborting on failure), then bumps `package.json`, commits, tags the commit `vX.Y.Z`, and pushes the commit and tag to GitHub.
+2. Pushing the `vX.Y.Z` tag triggers the [CI workflow](.github/workflows/ci.yml), which re-runs build, typecheck, lint and tests on GitHub. Wait for it to pass.
+3. `npm publish` — builds `dist/` (via the `prepublishOnly` script) and publishes the package to npm.
 
 ## Contributing
 

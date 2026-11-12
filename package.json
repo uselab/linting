@@ -1,6 +1,6 @@
 {
   "name": "@uselab/linting",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Uselab linting rules",
   "type": "module",
   "license": "MIT",
@@ -10,8 +10,7 @@
     "url": "git+https://github.com/uselab/linting.git"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "engines": {
     "node": ">=22.18"
@@ -43,8 +42,15 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "quality": "npm run build && npm run typecheck && npm run lint && npm test",
     "prepublishOnly": "npm run build",
+    "prepare": "simple-git-hooks",
+    "preversion": "npm run quality",
+    "postversion": "git push --follow-tags",
     "lint:analyze": "uselab-linting analyze"
+  },
+  "simple-git-hooks": {
+    "pre-push": "npm run quality"
   },
   "keywords": [
     "uselab",
@@ -61,6 +67,7 @@
     "eslint": "^10.14.0",
     "jiti": "^2.7.0",
     "prettier": "^3.10.0",
+    "simple-git-hooks": "^2.13.1",
     "tsup": "^9.0.0",
     "typescript": "~6.0.3",
     "vitest": "^5.1.0"

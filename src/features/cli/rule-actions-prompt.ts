@@ -75,12 +75,14 @@ export const moveRuleActions = (
   return state;
 };
 
-const row = (
-  choice: RuleChoice,
-  action: RuleAction,
-  active: boolean,
-  numberWidth: number,
-): string => {
+type RowOptions = {
+  choice: RuleChoice;
+  action: RuleAction;
+  active: boolean;
+  numberWidth: number;
+};
+
+const row = ({ choice, action, active, numberWidth }: RowOptions): string => {
   const label = styleText(ACTION_COLORS[action], ACTION_LABELS[action].padEnd(ACTION_WIDTH));
   const pointer = active ? styleText('cyan', '❯') : ' ';
   const numbered =
@@ -152,7 +154,12 @@ export const renderRuleActions = (options: RenderOptions): string => {
     maxItems: 15,
     rowPadding: header.split('\n').length + editIgnores.split('\n').length + 1,
     style: ({ choice, index }) =>
-      row(choice, state.actions[index] ?? 'keep', index === state.cursor - 1, numberWidth),
+      row({
+        choice,
+        action: state.actions[index] ?? 'keep',
+        active: index === state.cursor - 1,
+        numberWidth,
+      }),
   });
   const body = rows.map((line) => `${side}  ${line}`).join('\n');
   return `${header}${editIgnores}${body}\n${side}  ${styleText('dim', INSTRUCTIONS)}\n${styleText('cyan', S_BAR_END)}\n`;
