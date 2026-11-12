@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { configs, type Config } from '../../src/app';
+import {
+  browserPreset,
+  javascriptPreset,
+  nodePreset,
+  reactPreset,
+  typescriptPreset,
+  vuePreset,
+  type Config,
+} from '../../src/app';
 import { lintRule, lintSnippet } from '../helpers';
 
-const config = [...configs.javascript(), ...configs.browser()];
+const config = [...javascriptPreset(), ...browserPreset()];
 
 describe('classList mutation (no-restricted-syntax)', () => {
   const rule = 'no-restricted-syntax';
@@ -40,11 +48,11 @@ describe('classList mutation (no-restricted-syntax)', () => {
   const orders: [string, Config[]][] = [
     [
       'browser before react',
-      [...configs.javascript(), ...configs.typescript(), ...configs.browser(), ...configs.react()],
+      [...javascriptPreset(), ...typescriptPreset(), ...browserPreset(), ...reactPreset()],
     ],
     [
       'browser after react',
-      [...configs.javascript(), ...configs.typescript(), ...configs.react(), ...configs.browser()],
+      [...javascriptPreset(), ...typescriptPreset(), ...reactPreset(), ...browserPreset()],
     ],
   ];
 
@@ -71,10 +79,10 @@ describe('no-restricted-properties', () => {
         ? "<script setup lang=\"ts\">\ndocument.body.setAttribute('a', 'b');\n</script>\n"
         : "document.body.setAttribute('a', 'b');";
       const full = [
-        ...configs.javascript(),
-        ...configs.typescript(),
-        ...configs.vue(),
-        ...configs.browser(),
+        ...javascriptPreset(),
+        ...typescriptPreset(),
+        ...vuePreset(),
+        ...browserPreset(),
       ];
       expect(await lintRule(full, rule)(file, code)).toHaveLength(1);
     },
@@ -93,12 +101,12 @@ describe('browser globals', () => {
   });
 });
 
-describe('browser({ files }) + node({ ignores })', () => {
+describe('browserPreset({ files }) + nodePreset({ ignores })', () => {
   const globs = ['web/**'];
   const scoped = [
-    ...configs.javascript(),
-    ...configs.browser({ files: globs }),
-    ...configs.node({ ignores: globs }),
+    ...javascriptPreset(),
+    ...browserPreset({ files: globs }),
+    ...nodePreset({ ignores: globs }),
   ];
 
   it('gives the browser files browser globals, not Node ones', async () => {

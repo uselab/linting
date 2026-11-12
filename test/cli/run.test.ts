@@ -244,7 +244,7 @@ describe('run init', () => {
     await commitAndInit(dir);
 
     expect(read('eslint.config.ts')).toContain(
-      "...configs.boundaries({ tsconfig: 'tsconfig.app.json' }),",
+      "...boundariesPreset({ tsconfig: 'tsconfig.app.json' }),",
     );
     expect(existsSync(path.join(dir, 'eslint.config.mts'))).toBe(false);
     expect(read('prettier.config.ts')).toContain(
@@ -319,7 +319,7 @@ describe('run init', () => {
     await commitAndInit(dir);
 
     expect(read('eslint.config.ts')).toContain(
-      "...configs.boundaries({ srcDirs: ['apps/admin/src', 'apps/web/src'], tsconfig: ['apps/admin/tsconfig.json', 'apps/web/tsconfig.json'] }),",
+      "...boundariesPreset({ srcDirs: ['apps/admin/src', 'apps/web/src'], tsconfig: ['apps/admin/tsconfig.json', 'apps/web/tsconfig.json'] }),",
     );
     for (const app of ['web', 'admin']) {
       const paths = parse(read(`apps/${app}/tsconfig.json`)).compilerOptions.paths;
@@ -399,7 +399,7 @@ describe('run init', () => {
 
     await commitAndInit(dir);
 
-    expect(read('eslint.config.ts')).toContain('...configs.javascript(),');
+    expect(read('eslint.config.ts')).toContain("...javascriptPreset({ testFiles: ['test/**'] }),");
     expect(existsSync(path.join(dir, 'eslint.config.mts'))).toBe(false);
   });
 
@@ -481,7 +481,7 @@ describe('run init', () => {
 
     await commitAndInit(dir);
 
-    expect(read('eslint.config.mts')).toContain('...configs.javascript(),');
+    expect(read('eslint.config.mts')).toContain("...javascriptPreset({ testFiles: ['test/**'] }),");
     expect(existsSync(path.join(dir, 'eslint.config.ts'))).toBe(false);
     expect(existsSync(path.join(dir, 'eslint.config.js'))).toBe(false);
     expect(existsSync(path.join(dir, 'prettier.config.mts'))).toBe(false);
@@ -497,12 +497,12 @@ describe('run init', () => {
     writeFileSync(
       path.join(dir, 'eslint.config.js'),
       [
-        "import { configs } from '@uselab/linting';",
+        "import { javascriptPreset } from '@uselab/linting';",
         "import { globalIgnores } from 'eslint/config';",
         '',
         'export default [',
         '  globalIgnores([]),',
-        '  ...configs.javascript(),',
+        '  ...javascriptPreset(),',
         "  { rules: { 'no-console': 'off' } },",
         '];',
         '',
@@ -516,7 +516,7 @@ describe('run init', () => {
     expect(existsSync(path.join(dir, 'eslint.config.js'))).toBe(false);
     const config = read('eslint.config.ts');
     expect(config).toContain("{ rules: { 'no-console': 'off' } },");
-    expect(config).toContain('...configs.vue(),');
+    expect(config).toContain('...vuePreset(),');
     const changes = findUncommittedChanges(dir);
     expect(changes.some((line) => /^[AR] {2}.*eslint\.config\.ts$/u.test(line))).toBe(true);
     expect(changes.some((line) => /^[DR] {2}eslint\.config\.js/u.test(line))).toBe(true);
@@ -527,12 +527,12 @@ describe('run init', () => {
     writeFileSync(
       path.join(dir, 'eslint.config.ts'),
       [
-        "import { configs } from '@uselab/linting';",
+        "import { javascriptPreset } from '@uselab/linting';",
         "import { globalIgnores } from 'eslint/config';",
         '',
         'export default [',
         '  globalIgnores([]),',
-        '  ...configs.javascript(),',
+        '  ...javascriptPreset(),',
         "  { rules: { 'no-console': 'off' } },",
         '];',
         '',
@@ -545,7 +545,7 @@ describe('run init', () => {
 
     const config = read('eslint.config.ts');
     expect(config).toContain("{ rules: { 'no-console': 'off' } },");
-    expect(config).toContain('...configs.vue(),');
+    expect(config).toContain('...vuePreset(),');
   });
 
   it('writes the chosen test file globs', async () => {
@@ -557,7 +557,7 @@ describe('run init', () => {
     await commitAndInit(dir);
 
     expect(read('eslint.config.ts')).toContain(
-      "...configs.javascript({ testFiles: ['**/*.test.ts', 'e2e/**'] }),",
+      "...javascriptPreset({ testFiles: ['**/*.test.ts', 'e2e/**'] }),",
     );
   });
 
@@ -569,17 +569,19 @@ describe('run init', () => {
 
     await commitAndInit(dir);
 
-    expect(read('eslint.config.ts')).toContain('...configs.javascript({ testFiles: [] }),');
+    expect(read('eslint.config.ts')).toContain('...javascriptPreset(),');
   });
 
   it('prefills the test file globs of an existing config', async () => {
     writeFileSync(path.join(dir, 'package.json'), '{ "name": "app", "type": "module" }');
-    const javascript = "...configs.javascript({ testFiles: ['e2e/**'] }),";
+    const javascript = "...javascriptPreset({ testFiles: ['e2e/**'] }),";
     writeFileSync(
       path.join(dir, 'eslint.config.ts'),
-      ["import { configs } from '@uselab/linting';", `export default [${javascript}];`, ''].join(
-        '\n',
-      ),
+      [
+        "import { javascriptPreset } from '@uselab/linting';",
+        `export default [${javascript}];`,
+        '',
+      ].join('\n'),
     );
     answers.presets = ['javascript', 'node'];
     answers.confirm = true;
@@ -587,8 +589,8 @@ describe('run init', () => {
     await commitAndInit(dir);
 
     const config = read('eslint.config.ts');
-    expect(config).toContain("...configs.javascript({ testFiles: ['e2e/**'] })");
-    expect(config).toContain('...configs.node');
+    expect(config).toContain("...javascriptPreset({ testFiles: ['e2e/**'] })");
+    expect(config).toContain('...nodePreset');
   });
 
   it('defaults to "type": "module" without CommonJS code and writes no report', async () => {
@@ -619,7 +621,7 @@ describe('run init', () => {
     const keys = Object.keys(packageJson);
     expect(keys[keys.indexOf('name') + 1]).toBe('type');
     expect(packageJson.type).toBe('module');
-    expect(read('eslint.config.ts')).toContain('...configs.javascript(),');
+    expect(read('eslint.config.ts')).toContain("...javascriptPreset({ testFiles: ['test/**'] }),");
     const report = read('REFACTOR-COMMON-JS.md').split('\n');
     const heading = report.findIndex((line) => line.includes('scripts/build.js'));
     const requireLine = report.findIndex((line) => line.includes("const fs = require('node:fs');"));
@@ -834,15 +836,15 @@ describe('run init lint scope', () => {
 
   it('leaves non-literal globalIgnores() unchanged without asking', async () => {
     const text = [
-      "import { configs } from '@uselab/linting';",
+      "import { javascriptPreset, browserPreset, nodePreset } from '@uselab/linting';",
       "import { globalIgnores } from 'eslint/config';",
       "const skipped = ['legacy/**'];",
       '',
       'export default [',
       '  globalIgnores(skipped),',
-      '  ...configs.javascript(),',
-      "  ...configs.browser({ files: ['src/**'] }),",
-      "  ...configs.node({ ignores: ['src/**'] }),",
+      '  ...javascriptPreset(),',
+      "  ...browserPreset({ files: ['src/**'] }),",
+      "  ...nodePreset({ ignores: ['src/**'] }),",
       '];',
       '',
     ].join('\n');
@@ -870,8 +872,8 @@ describe('run init environment', () => {
     const config = await initEnvironment();
 
     expect(answers.environmentDefaults).toEqual(['browser', 'src/**']);
-    expect(config).toContain("...configs.browser({ files: ['src/**'] }),");
-    expect(config).toContain("...configs.node({ ignores: ['src/**'] }),");
+    expect(config).toContain("...browserPreset({ files: ['src/**'] }),");
+    expect(config).toContain("...nodePreset({ ignores: ['src/**'] }),");
   });
 
   it('writes the edited browser globs', async () => {
@@ -880,10 +882,10 @@ describe('run init environment', () => {
     const config = await initEnvironment();
 
     expect(config).toContain(
-      "...configs.browser({ files: ['apps/web/src/**', 'apps/admin/src/**'] }),",
+      "...browserPreset({ files: ['apps/web/src/**', 'apps/admin/src/**'] }),",
     );
     expect(config).toContain(
-      "...configs.node({ ignores: ['apps/web/src/**', 'apps/admin/src/**'] }),",
+      "...nodePreset({ ignores: ['apps/web/src/**', 'apps/admin/src/**'] }),",
     );
   });
 
@@ -896,8 +898,8 @@ describe('run init environment', () => {
     const config = await initEnvironment();
 
     expect(answers.environmentDefaults).toEqual(['node']);
-    expect(config).toContain('...configs.node(),');
-    expect(config).not.toContain('configs.browser');
+    expect(config).toContain('...nodePreset(),');
+    expect(config).not.toContain('browserPreset');
   });
 
   it('preselects the existing environment', async () => {
@@ -905,12 +907,12 @@ describe('run init environment', () => {
     writeFileSync(
       path.join(dir, CONFIG),
       [
-        "import { configs } from '@uselab/linting';",
+        "import { javascriptPreset, browserPreset, nodePreset } from '@uselab/linting';",
         '',
         'export default [',
-        '  ...configs.javascript(),',
-        "  ...configs.browser({ files: ['web/**'] }),",
-        "  ...configs.node({ ignores: ['web/**'] }),",
+        '  ...javascriptPreset(),',
+        "  ...browserPreset({ files: ['web/**'] }),",
+        "  ...nodePreset({ ignores: ['web/**'] }),",
         '];',
         '',
       ].join('\n'),
@@ -918,7 +920,7 @@ describe('run init environment', () => {
 
     const existing = await initEnvironment();
 
-    expect(existing).toContain("...configs.browser({ files: ['web/**'] }),");
+    expect(existing).toContain("...browserPreset({ files: ['web/**'] }),");
     expect(answers.environmentDefaults).toEqual(['browser', 'web/**']);
   });
 });

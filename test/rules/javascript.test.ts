@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { configs } from '../../src/app';
-import { configForFile, lintRule, loadConfigs, severityOf, statements } from '../helpers';
+import { javascriptPreset } from '../../src/app';
+import { configForFile, lintRule, loadPresets, severityOf, statements } from '../helpers';
 
-const config = configs.javascript();
+const config = javascriptPreset({ testFiles: ['test/**'] });
 const FILE = 'src/some-file.js';
 
 const ifChain = (count: number): string =>
@@ -111,7 +111,7 @@ describe('max-lines-per-function (max 100, skip blank lines and comments, IIFEs)
   );
 
   describe('with custom testFiles', () => {
-    const custom = configs.javascript({ testFiles: ['tests/**/*.js', '**/*.e2e.js'] });
+    const custom = javascriptPreset({ testFiles: ['tests/**/*.js', '**/*.e2e.js'] });
 
     it.each(['tests/some-file.js', 'src/some-file.e2e.js'])(
       'is off for matching files (%s)',
@@ -127,7 +127,7 @@ describe('max-lines-per-function (max 100, skip blank lines and comments, IIFEs)
   });
 
   describe('without test files', () => {
-    const none = configs.javascript({ testFiles: [] });
+    const none = javascriptPreset({ testFiles: [] });
 
     it('has no tests block', () => {
       expect(none.map((entry) => entry.name)).not.toContain('uselab/javascript/tests');
@@ -233,8 +233,8 @@ describe('dev-mode severity', () => {
     ['NODE_ENV=development in CI', { CI: 'true', NODE_ENV: 'development' }, 1],
     ['CI', { CI: 'true', NODE_ENV: 'production' }, 2],
   ])('%s', async (_label, env, expected) => {
-    const loaded = await loadConfigs(env);
-    const resolved = await configForFile(loaded.javascript(), FILE);
+    const loaded = await loadPresets(env);
+    const resolved = await configForFile(loaded.javascriptPreset(), FILE);
     for (const rule of devRules) {
       expect(severityOf(resolved, rule), rule).toBe(expected);
     }

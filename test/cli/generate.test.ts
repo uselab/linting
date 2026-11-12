@@ -49,17 +49,18 @@ describe('generateEslintConfig', () => {
     expect(config).toBe(
       [
         "import { globalIgnores } from 'eslint/config';",
-        "import { configs } from '@uselab/linting';",
+        "import { javascriptPreset, typescriptPreset, reactPreset, browserPreset, prettierPreset } from '@uselab/linting';",
         '',
         'export default [',
+        '  // Lint scope: all files are linted, except the defaults.',
         '  globalIgnores([',
         ...DEFAULT_LINES,
         '  ]),',
-        '  ...configs.javascript(),',
-        '  ...configs.typescript(),',
-        '  ...configs.react(),',
-        '  ...configs.browser(),',
-        '  ...configs.prettier(),',
+        '  ...javascriptPreset(),',
+        '  ...typescriptPreset(),',
+        '  ...reactPreset(),',
+        '  ...browserPreset(),',
+        '  ...prettierPreset,',
         '];',
         '',
       ].join('\n'),
@@ -68,12 +69,12 @@ describe('generateEslintConfig', () => {
 
   it('places vueA11y right after vue', () => {
     const config = generateEslintConfig({ presets: ['prettier', 'vueA11y', 'react', 'vue'] });
-    const spreadLines = config.split('\n').filter((line) => line.startsWith('  ...configs.'));
+    const spreadLines = config.split('\n').filter((line) => line.startsWith('  ...'));
     expect(spreadLines).toEqual([
-      '  ...configs.vue(),',
-      '  ...configs.vueA11y(),',
-      '  ...configs.react(),',
-      '  ...configs.prettier(),',
+      '  ...vuePreset(),',
+      '  ...vueA11yPreset(),',
+      '  ...reactPreset(),',
+      '  ...prettierPreset,',
     ]);
   });
 
@@ -105,12 +106,24 @@ describe('generateEslintConfig', () => {
     expect(config).toContain("    '!src/**',\n");
   });
 
-  it('writes no comments outside opt-in mode', () => {
+  it('writes no pattern comments outside opt-in mode', () => {
     const config = generateEslintConfig({
       presets: ['javascript'],
       ignores: { mode: 'exclude', globs: ['**/*'] },
     });
-    expect(config).not.toContain('//');
+    expect(ignoresBlock(config).join('\n')).not.toContain('//');
+  });
+
+  it.each<[IgnoresAnswers | undefined, string]>([
+    [undefined, 'all files are linted'],
+    [{ mode: 'all', globs: [] }, 'all files are linted'],
+    [{ mode: 'exclude', globs: ['legacy/**'] }, 'opt-out'],
+    [{ mode: 'only', globs: ['src/**'] }, 'opt-in'],
+  ])('comments the chosen lint scope %o above the global ignores', (ignores, text) => {
+    const lines = generateEslintConfig({ presets: ['javascript'], ignores }).split('\n');
+    const comment = lines[lines.indexOf('  globalIgnores([') - 1];
+    expect(comment).toMatch(/^ {2}\/\/ Lint scope: /);
+    expect(comment).toContain(text);
   });
 
   it('calls boundaries without options when only defaults are chosen', () => {
@@ -118,7 +131,7 @@ describe('generateEslintConfig', () => {
       presets: ['javascript', 'boundaries'],
       boundaries: { srcDirs: ['src'] },
     });
-    expect(config).toContain('  ...configs.boundaries(),');
+    expect(config).toContain('  ...boundariesPreset(),');
   });
 
   it('emits the chosen boundaries options', () => {
@@ -130,16 +143,16 @@ describe('generateEslintConfig', () => {
       },
     });
     expect(config).toContain(
-      String.raw`  ...configs.boundaries({ srcDirs: ['packages/o\'web/src', 'lib'], tsconfig: 'tsconfig.app.json' }),`,
+      String.raw`  ...boundariesPreset({ srcDirs: ['packages/o\'web/src', 'lib'], tsconfig: 'tsconfig.app.json' }),`,
     );
   });
 
-  it('calls javascript without options for the default test file globs', () => {
+  it('emits the default test file globs explicitly', () => {
     const config = generateEslintConfig({
       presets: ['javascript'],
       javascript: { testFiles: [...DEFAULT_TEST_FILES] },
     });
-    expect(config).toContain('  ...configs.javascript(),');
+    expect(config).toContain("  ...javascriptPreset({ testFiles: ['test/**'] }),");
   });
 
   it('emits the chosen test file globs', () => {
@@ -148,13 +161,13 @@ describe('generateEslintConfig', () => {
       javascript: { testFiles: ['**/*.test.ts', "e2e/o'k/**"] },
     });
     expect(config).toContain(
-      String.raw`  ...configs.javascript({ testFiles: ['**/*.test.ts', 'e2e/o\'k/**'] }),`,
+      String.raw`  ...javascriptPreset({ testFiles: ['**/*.test.ts', 'e2e/o\'k/**'] }),`,
     );
   });
 
-  it('emits an empty testFiles list when there are no test files', () => {
+  it('omits testFiles when there are no test files', () => {
     const config = generateEslintConfig({ presets: ['javascript'], javascript: { testFiles: [] } });
-    expect(config).toContain('  ...configs.javascript({ testFiles: [] }),');
+    expect(config).toContain('  ...javascriptPreset(),');
   });
 
   it('removes duplicates in orderPresets', () => {

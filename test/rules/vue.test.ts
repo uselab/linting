@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { configs, type Config } from '../../src/app';
+import { javascriptPreset, typescriptPreset, vuePreset, type Config } from '../../src/app';
 import { lintRule } from '../helpers';
 
-const config = [...configs.javascript(), ...configs.typescript(), ...configs.vue()];
+const config = [...javascriptPreset(), ...typescriptPreset(), ...vuePreset()];
 const FILE = 'src/components/user-card.vue';
 
 const sfc = (template: string, script = ''): string =>
@@ -163,8 +163,8 @@ describe('max-lines (off for .vue files)', () => {
 
 describe('preset order', () => {
   const orders: [string, Config[]][] = [
-    ['vue before typescript', [...configs.javascript(), ...configs.vue(), ...configs.typescript()]],
-    ['vue after typescript', [...configs.javascript(), ...configs.typescript(), ...configs.vue()]],
+    ['vue before typescript', [...javascriptPreset(), ...vuePreset(), ...typescriptPreset()]],
+    ['vue after typescript', [...javascriptPreset(), ...typescriptPreset(), ...vuePreset()]],
   ];
 
   it.each(orders)('parses <script lang="ts"> and applies options (%s)', async (_label, ordered) => {

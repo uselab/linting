@@ -7,7 +7,6 @@ import { devSeverity, restrictedSyntax } from '../../support/env';
 import {
   ROOT_TOOLING_FILES,
   scopeConfigs,
-  TEST_FILES,
   type Config,
   type PresetOptions,
   type Rules,
@@ -55,7 +54,7 @@ const houseRules: Rules = {
 export type JavaScriptOptions = PresetOptions & {
   /**
    * Globs of test files, which get relaxed rules (no `max-lines` / `max-lines-per-function`).
-   * Default: `test/**`. Pass `[]` when the project has no test files.
+   * No default: without test files (omitted or `[]`) no rules are relaxed.
    */
   testFiles?: string[];
 };
@@ -72,7 +71,7 @@ const devRules: Rules = {
  * Uselab house rules. Also configures root-level tooling files and *.cjs files for Node.
  */
 export const javascript = (options: JavaScriptOptions = {}): Config[] => {
-  const testFiles = options.testFiles ?? TEST_FILES;
+  const testFiles = options.testFiles ?? [];
   return scopeConfigs(
     [
       { name: 'uselab/javascript/recommended', ...js.configs.recommended },

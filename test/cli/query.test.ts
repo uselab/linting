@@ -71,7 +71,7 @@ describe('generated config', () => {
       presets: ['javascript', 'vue', 'query'],
       query: { library: 'vue-query' },
     });
-    expect(code).toContain("  ...configs.query({ library: 'vue-query' }),");
+    expect(code).toContain("  ...queryPreset({ library: 'vue-query' }),");
     expect(readEslintConfig(code)?.query).toEqual({ library: 'vue-query' });
   });
 
@@ -102,7 +102,7 @@ describe('generated config', () => {
       query: { library: 'vue-query' },
     });
     expect(update?.added).toEqual(['query']);
-    expect(update?.code).toContain("query({ library: 'vue-query' })");
+    expect(update?.code).toContain("queryPreset({ library: 'vue-query' })");
   });
 });
 

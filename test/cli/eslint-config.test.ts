@@ -15,17 +15,17 @@ const DEFAULTS = "'**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo'";
 
 const CUSTOM_CONFIG = [
   "import { globalIgnores } from 'eslint/config';",
-  "import { configs as uselab } from '@uselab/linting';",
+  "import { javascriptPreset, boundariesPreset, prettierPreset } from '@uselab/linting';",
   "import local from './eslint.local.js';",
   '',
   'export default [',
   `  globalIgnores([${DEFAULTS}]),`,
-  '  ...uselab.javascript(),',
+  '  ...javascriptPreset(),',
   '  // project rules',
   "  { rules: { 'no-console': 'off' } },",
   '  ...local,',
-  "  ...uselab.boundaries({ tsconfig: 'tsconfig.app.json' }),",
-  '  ...uselab.prettier(),',
+  "  ...boundariesPreset({ tsconfig: 'tsconfig.app.json' }),",
+  '  ...prettierPreset,',
   '];',
   '',
 ].join('\n');
@@ -49,9 +49,7 @@ const spreads = (code: string | undefined): string[] =>
     .map((line) => line.trim())
     .filter(
       (line) =>
-        line.startsWith('...uselab.') ||
-        line.startsWith('...configs.') ||
-        line.startsWith('globalIgnores('),
+        (line.startsWith('...') && line.includes('Preset')) || line.startsWith('globalIgnores('),
     );
 
 describe('readEslintConfig', () => {
@@ -65,7 +63,7 @@ describe('readEslintConfig', () => {
     });
     expect(readEslintConfig(text)).toEqual({
       presets: ['javascript', 'typescript', 'boundaries', 'prettier'],
-      javascript: {},
+      javascript: { testFiles: [] },
       javascriptEditable: true,
       boundaries: {
         srcDirs: ['apps/web/src', 'apps/admin/src'],
@@ -88,17 +86,17 @@ describe('readEslintConfig', () => {
   it('supports a renamed import and defineConfig([...])', () => {
     const text = [
       "import { defineConfig } from 'eslint/config';",
-      "import { configs as c } from '@uselab/linting';",
-      'export default defineConfig([...c.javascript, ...c.vue]);',
+      "import { javascriptPreset as js, vuePreset as vue } from '@uselab/linting';",
+      'export default defineConfig([...js, ...vue()]);',
     ].join('\n');
     expect(readEslintConfig(text)?.presets).toEqual(['javascript', 'vue']);
   });
 
   it('marks non-literal boundaries options as not editable', () => {
     const text = [
-      "import { configs } from '@uselab/linting';",
+      "import { boundariesPreset } from '@uselab/linting';",
       'const tsconfig = "tsconfig.json";',
-      'export default [...configs.boundaries({ tsconfig })];',
+      'export default [...boundariesPreset({ tsconfig })];',
     ].join('\n');
     expect(readEslintConfig(text)).toMatchObject({
       presets: ['boundaries'],
@@ -126,9 +124,9 @@ describe('readEslintConfig', () => {
 
   it('marks non-literal javascript options as not editable', () => {
     const text = [
-      "import { configs } from '@uselab/linting';",
+      "import { javascriptPreset } from '@uselab/linting';",
       "const testFiles = ['e2e/**'];",
-      'export default [...configs.javascript({ testFiles })];',
+      'export default [...javascriptPreset({ testFiles })];',
     ].join('\n');
     expect(readEslintConfig(text)).toMatchObject({
       javascript: undefined,
@@ -153,12 +151,24 @@ describe('updateEslintConfig', () => {
     expect(update?.code).toContain("import local from './eslint.local.js';");
     expect(spreads(update?.code)).toEqual([
       `globalIgnores([${DEFAULTS}]),`,
-      '...uselab.javascript(),',
-      '...uselab.typescript(),',
-      '...uselab.vue(),',
-      '...uselab.node(),',
-      '...uselab.prettier(),',
+      '...javascriptPreset(),',
+      '...typescriptPreset(),',
+      '...vuePreset(),',
+      '...nodePreset(),',
+      '...prettierPreset,',
     ]);
+  });
+
+  it('adds and removes the matching imports', () => {
+    const update = updateEslintConfig(CUSTOM_CONFIG, {
+      presets: ['javascript', 'typescript', 'prettier'],
+    });
+    const [importLine] =
+      (update?.code ?? '').match(/import \{[^}]*\} from '@uselab\/linting';/) ?? [];
+    expect(importLine).toContain('typescriptPreset');
+    expect(importLine).toContain('javascriptPreset');
+    expect(importLine).toContain('prettierPreset');
+    expect(importLine).not.toContain('boundariesPreset');
   });
 
   it('rewrites changed boundaries options', () => {
@@ -167,7 +177,7 @@ describe('updateEslintConfig', () => {
       boundaries: { tsconfig: 'tsconfig.json', srcDirs: ['src'] },
     });
     expect(update?.boundariesUpdated).toBe(true);
-    expect(update?.code).toContain("...uselab.boundaries({ tsconfig: 'tsconfig.json' }),");
+    expect(update?.code).toContain("...boundariesPreset({ tsconfig: 'tsconfig.json' }),");
   });
 
   it('returns the text unchanged when the presets match', () => {
@@ -192,8 +202,8 @@ describe('updateEslintConfig', () => {
     const update = updateEslintConfig(text, { presets: ['javascript', 'boundaries'] });
     expect(spreads(update?.code)).toEqual([
       `globalIgnores([${DEFAULTS}]),`,
-      '...configs.javascript(),',
-      '...configs.boundaries(),',
+      '...javascriptPreset(),',
+      '...boundariesPreset(),',
     ]);
   });
 
@@ -208,22 +218,31 @@ describe('updateEslintConfig', () => {
       boundaries: { tsconfig: 'tsconfig.app.json' },
     });
     expect(update).toMatchObject({ javascriptUpdated: true, boundariesUpdated: false });
-    expect(update?.code).toContain("...uselab.javascript({ testFiles: ['e2e/**'] }),");
+    expect(update?.code).toContain("...javascriptPreset({ testFiles: ['e2e/**'] }),");
   });
 
-  it('keeps javascript() when the default test file globs are chosen', () => {
+  it('keeps javascript() when there are no test files', () => {
     const update = updateEslintConfig(CUSTOM_CONFIG, {
       presets: ['javascript', 'boundaries', 'prettier'],
-      javascript: { testFiles: [...DEFAULT_TEST_FILES] },
+      javascript: { testFiles: [] },
       boundaries: { tsconfig: 'tsconfig.app.json' },
     });
     expect(update?.javascriptUpdated).toBe(false);
   });
 
+  it('writes the default test file globs explicitly', () => {
+    const update = updateEslintConfig(CUSTOM_CONFIG, {
+      presets: ['javascript', 'boundaries', 'prettier'],
+      javascript: { testFiles: [...DEFAULT_TEST_FILES] },
+      boundaries: { tsconfig: 'tsconfig.app.json' },
+    });
+    expect(update?.code).toContain("...javascriptPreset({ testFiles: ['test/**'] }),");
+  });
+
   it('leaves non-literal javascript options unchanged', () => {
     const text = CUSTOM_CONFIG.replace(
-      '...uselab.javascript(),',
-      '...uselab.javascript({ testFiles: local.testFiles }),',
+      '...javascriptPreset(),',
+      '...javascriptPreset({ testFiles: local.testFiles }),',
     );
     const update = updateEslintConfig(text, {
       presets: ['javascript', 'boundaries', 'prettier'],
@@ -244,13 +263,13 @@ describe('browser() / node()', () => {
     environment: { type: 'node' as const, browserFiles: [] },
   };
   const BROWSER_SPREADS = [
-    "...configs.browser({ files: ['src/**', 'apps/web/src/**'] }),",
-    "...configs.node({ ignores: ['src/**', 'apps/web/src/**'] }),",
+    "...browserPreset({ files: ['src/**', 'apps/web/src/**'] }),",
+    "...nodePreset({ ignores: ['src/**', 'apps/web/src/**'] }),",
   ];
 
   it('generates scoped globals for a browser project and node() for a Node project', () => {
     expect(spreads(generateEslintConfig(BROWSER)).slice(2)).toEqual(BROWSER_SPREADS);
-    expect(spreads(generateEslintConfig(NODE)).slice(2)).toEqual(['...configs.node(),']);
+    expect(spreads(generateEslintConfig(NODE)).slice(2)).toEqual(['...nodePreset(),']);
   });
 
   it('reads the globs and the project type', () => {
@@ -275,8 +294,8 @@ describe('browser() / node()', () => {
     const update = updateEslintConfig(text, answers);
     expect(update?.globalsUpdated).toEqual(['browser', 'node']);
     expect(spreads(update?.code).slice(2)).toEqual([
-      "...configs.browser({ files: ['web/**'] }),",
-      "...configs.node({ ignores: ['web/**'] }),",
+      "...browserPreset({ files: ['web/**'] }),",
+      "...nodePreset({ ignores: ['web/**'] }),",
     ]);
     expect(updateEslintConfig(text, BROWSER)?.code).toBe(text);
   });
@@ -284,7 +303,7 @@ describe('browser() / node()', () => {
   it('switches between a browser and a Node project', () => {
     const toNode = updateEslintConfig(generateEslintConfig(BROWSER), NODE);
     expect(toNode).toMatchObject({ removed: ['browser'], globalsUpdated: ['node'] });
-    expect(spreads(toNode?.code).slice(2)).toEqual(['...configs.node(),']);
+    expect(spreads(toNode?.code).slice(2)).toEqual(['...nodePreset(),']);
 
     const toBrowser = updateEslintConfig(generateEslintConfig(NODE), BROWSER);
     expect(toBrowser).toMatchObject({ added: ['browser'], globalsUpdated: ['node'] });
@@ -293,12 +312,12 @@ describe('browser() / node()', () => {
 
   it('leaves non-literal options unchanged', () => {
     const text = [
-      "import { configs } from '@uselab/linting';",
+      "import { javascriptPreset, browserPreset, nodePreset } from '@uselab/linting';",
       "const files = ['src/**'];",
       'export default [',
-      '  ...configs.javascript(),',
-      '  ...configs.browser({ files }),',
-      '  ...configs.node({ ignores: files }),',
+      '  ...javascriptPreset(),',
+      '  ...browserPreset({ files }),',
+      '  ...nodePreset({ ignores: files }),',
       '];',
     ].join('\n');
     expect(readEslintConfig(text)).toMatchObject({ browserEditable: false, nodeEditable: false });
@@ -449,9 +468,9 @@ describe('updateEslintIgnores', () => {
     expect(update?.updated).toBe(true);
     expect(spreads(update?.code)).toEqual([
       `globalIgnores(['legacy/**', ${DEFAULTS}]),`,
-      '...uselab.javascript(),',
-      "...uselab.boundaries({ tsconfig: 'tsconfig.app.json' }),",
-      '...uselab.prettier(),',
+      '...javascriptPreset(),',
+      "...boundariesPreset({ tsconfig: 'tsconfig.app.json' }),",
+      '...prettierPreset,',
     ]);
     expect(update?.code).toContain('...local,');
     expect(readEslintConfig(update?.code ?? '')?.ignores).toEqual(ignores);

@@ -1,8 +1,8 @@
 import eslintConfigPrettier from 'eslint-config-prettier';
-import { scopeConfigs, type Config, type PresetOptions } from '../../support/shared';
+import type { Config } from '../../support/shared';
 
 /**
- * Turns off rules that conflict with Prettier. Must be the last preset.
+ * Turns off rules that conflict with Prettier. Must be the last preset. Always applies to all
+ * files: Prettier does the formatting, so exclude files via `.prettierignore`.
  */
-export const prettier = (options: PresetOptions = {}): Config[] =>
-  scopeConfigs([{ ...eslintConfigPrettier, name: 'uselab/prettier' }], options);
+export const prettier: Config[] = [{ ...eslintConfigPrettier, name: 'uselab/prettier' }];

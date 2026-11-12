@@ -1,6 +1,12 @@
 import type { Linter } from 'eslint';
 import { afterEach, describe, expect, it } from 'vitest';
-import { configs, type BoundariesOptions } from '../../src/app';
+import {
+  aliasesPreset,
+  boundariesPreset,
+  javascriptPreset,
+  typescriptPreset,
+  type BoundariesOptions,
+} from '../../src/app';
 import { OUTSIDE_IMPORT_MESSAGE } from '../../src/support/eslint-plugins/layout';
 import { fixturePath, lintFixture, ruleIds, type LintReport } from '../helpers';
 
@@ -19,10 +25,10 @@ const lint = async (
 ): Promise<LintReport> => {
   process.chdir(fixturePath(fixture));
   return lintFixture(fixture, [
-    ...configs.javascript(),
-    ...configs.typescript(),
-    ...(aliases ? configs.aliases() : []),
-    ...configs.boundaries(options),
+    ...javascriptPreset(),
+    ...typescriptPreset(),
+    ...(aliases ? aliasesPreset() : []),
+    ...boundariesPreset(options),
   ]);
 };
 
@@ -116,10 +122,10 @@ describe('srcDirs', () => {
   });
 
   it('rejects nested src dirs', () => {
-    expect(() => configs.boundaries({ srcDirs: ['src', './src/features/x/src/'] })).toThrow(
+    expect(() => boundariesPreset({ srcDirs: ['src', './src/features/x/src/'] })).toThrow(
       'Boundaries cannot be nested',
     );
-    expect(() => configs.boundaries({ srcDirs: ['web/src', 'web/src-admin'] })).not.toThrow();
+    expect(() => boundariesPreset({ srcDirs: ['web/src', 'web/src-admin'] })).not.toThrow();
   });
 });
 

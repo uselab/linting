@@ -2,7 +2,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ESLint, type Linter } from 'eslint';
 import { expect, vi } from 'vitest';
-import type { Config, configs as Configs } from '../src/app';
+import type { Config } from '../src/app';
+import type * as Presets from '../src/app';
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
@@ -92,14 +93,13 @@ export const severityOf = (resolved: Linter.Config, ruleId: string): number | un
 };
 
 /** Re-imports the presets with the given environment, since dev mode is evaluated at load time. */
-export const loadConfigs = async (env: Record<string, string>): Promise<typeof Configs> => {
+export const loadPresets = async (env: Record<string, string>): Promise<typeof Presets> => {
   vi.resetModules();
   for (const [key, value] of Object.entries(env)) {
     vi.stubEnv(key, value);
   }
   try {
-    const module = await import('../src/app');
-    return module.configs;
+    return await import('../src/app');
   } finally {
     vi.unstubAllEnvs();
   }

@@ -14,7 +14,9 @@ import {
   GLOBALS_OPTION_KEYS,
   globsOptions,
   ignoresExpression,
+  LINTING_PACKAGE,
   PRESET_ORDER,
+  presetExport,
   presetExpression,
   type BoundariesAnswers,
   type EnvironmentAnswers,
@@ -26,16 +28,15 @@ import {
   type QueryAnswers,
 } from './generate';
 
-const PACKAGE = '@uselab/linting';
-
 type ArrayNode = Extract<ASTNode, { type: 'ArrayExpression' }>;
 type ElementNode = ArrayNode['elements'][number];
 
-type UselabEntry = { name: string; node: ASTNode };
+type UselabEntry = { name: PresetId; node: ASTNode };
 
 type ParsedConfig = {
   mod: ProxifiedModule;
-  local: string;
+  /** Local names of the presets imported from `@uselab/linting`. */
+  locals: Partial<Record<PresetId, string>>;
   array: ArrayNode;
   /** Local name of `globalIgnores` imported from `eslint/config`, if imported. */
   ignoresLocal?: string;
@@ -80,8 +81,6 @@ export type ConfigUpdate = {
   ignoresUpdated: boolean;
 };
 
-const isPreset = (name: string): name is PresetId => PRESET_ORDER.some((preset) => preset === name);
-
 /** Finds the config array of `export default [...]` or `export default defineConfig([...])`. */
 const configArray = (node: ASTNode): ArrayNode | undefined => {
   if (node.type === 'ArrayExpression') {
@@ -91,44 +90,47 @@ const configArray = (node: ASTNode): ArrayNode | undefined => {
   return first?.type === 'ArrayExpression' ? first : undefined;
 };
 
-/** Parses an ESLint flat config that spreads `configs` imported from `@uselab/linting`. */
+/** Parses an ESLint flat config that spreads presets imported from `@uselab/linting`. */
 const parseConfig = (text: string): ParsedConfig | undefined => {
   try {
     const mod = parseModule(text);
-    const item = mod.imports.$items.find(
-      ({ from, imported }) => from === PACKAGE && imported === 'configs',
-    );
+    const imports = mod.imports.$items.filter(({ from }) => from === LINTING_PACKAGE);
+    const locals: ParsedConfig['locals'] = {};
+    for (const preset of PRESET_ORDER) {
+      const item = imports.find(({ imported }) => imported === presetExport(preset));
+      if (item) {
+        locals[preset] = item.local;
+      }
+    }
     const array = configArray(mod.exports.default.$ast);
     const ignoresLocal = mod.imports.$items.find(
       ({ from, imported }) => from === GLOBAL_IGNORES_MODULE && imported === GLOBAL_IGNORES,
     )?.local;
-    return item && array ? { mod, local: item.local, array, ignoresLocal } : undefined;
+    return imports.length > 0 && array ? { mod, locals, array, ignoresLocal } : undefined;
   } catch {
     return undefined;
   }
 };
 
-/** Returns `name` for `...configs.name` and `...configs.name(...)` spreads. */
-const uselabEntry = (element: ElementNode, local: string): UselabEntry | undefined => {
+const localName = ({ locals }: ParsedConfig, preset: PresetId): string =>
+  locals[preset] ?? presetExport(preset);
+
+/** Returns the preset for `...preset` and `...preset(...)` spreads of an imported preset. */
+const uselabEntry = (element: ElementNode, parsed: ParsedConfig): UselabEntry | undefined => {
   if (element?.type !== 'SpreadElement') {
     return undefined;
   }
   const { argument } = element;
-  const member = argument.type === 'CallExpression' ? argument.callee : argument;
-  if (
-    member.type !== 'MemberExpression' ||
-    member.computed ||
-    member.object.type !== 'Identifier' ||
-    member.object.name !== local ||
-    member.property.type !== 'Identifier'
-  ) {
+  const callee = argument.type === 'CallExpression' ? argument.callee : argument;
+  if (callee.type !== 'Identifier') {
     return undefined;
   }
-  return { name: member.property.name, node: argument };
+  const name = PRESET_ORDER.find((preset) => parsed.locals[preset] === callee.name);
+  return name && { name, node: argument };
 };
 
-const entries = ({ array, local }: ParsedConfig): (UselabEntry | undefined)[] =>
-  array.elements.map((element) => uselabEntry(element, local));
+const entries = (parsed: ParsedConfig): (UselabEntry | undefined)[] =>
+  parsed.array.elements.map((element) => uselabEntry(element, parsed));
 
 type IgnoresEntry = { index: number; node: ASTNode };
 
@@ -190,7 +192,7 @@ const readBoundaries = (node: ASTNode): BoundariesAnswers | undefined => {
 /** Reads `javascript()` and `javascript({ testFiles })` with a literal array. */
 const readJavascript = (node: ASTNode): JavaScriptAnswers | undefined => {
   const read = readGlobsCall(node, 'testFiles');
-  return read && (read.globs ? { testFiles: read.globs } : {});
+  return read && { testFiles: read.globs ?? [] };
 };
 
 type PresetEntries = {
@@ -288,8 +290,7 @@ const arrayElement = (expression: string): NonNullable<ElementNode> => {
 const spreadElement = (expression: string): NonNullable<ElementNode> =>
   arrayElement(`...${expression}`);
 
-const orderIndex = (name: string): number =>
-  isPreset(name) ? PRESET_ORDER.indexOf(name) : Number.NEGATIVE_INFINITY;
+const orderIndex = (name: PresetId): number => PRESET_ORDER.indexOf(name);
 
 /** Index to insert a preset at: before the first later preset, else after the last uselab entry. */
 const insertIndex = (parsed: ParsedConfig, preset: PresetId): number => {
@@ -320,7 +321,7 @@ const replaceEntry = (parsed: ParsedConfig, preset: PresetId, answers: InitAnswe
   parsed.array.elements.splice(
     index,
     1,
-    spreadElement(presetExpression(preset, answers, parsed.local)),
+    spreadElement(presetExpression(preset, answers, localName(parsed, preset))),
   );
   return true;
 };
@@ -344,11 +345,17 @@ const updateJavascript = (
 const removePresets = (parsed: ParsedConfig, presets: PresetId[]): void => {
   const { elements } = parsed.array;
   const remove = elements
-    .map((element, index) => ({ entry: uselabEntry(element, parsed.local), index }))
-    .filter(({ entry }) => entry && isPreset(entry.name) && presets.includes(entry.name))
+    .map((element, index) => ({ entry: uselabEntry(element, parsed), index }))
+    .filter(({ entry }) => entry && presets.includes(entry.name))
     .reverse();
   for (const { index } of remove) {
     elements.splice(index, 1);
+  }
+  for (const preset of presets) {
+    const local = parsed.locals[preset];
+    if (local !== undefined) {
+      delete parsed.mod.imports[local]; // eslint-disable-line no-param-reassign -- magicast proxy
+    }
   }
 };
 
@@ -357,8 +364,12 @@ const addPresets = (parsed: ParsedConfig, presets: PresetId[], answers: InitAnsw
     parsed.array.elements.splice(
       insertIndex(parsed, preset),
       0,
-      spreadElement(presetExpression(preset, answers, parsed.local)),
+      spreadElement(presetExpression(preset, answers, localName(parsed, preset))),
     );
+    if (parsed.locals[preset] === undefined) {
+      const name = presetExport(preset);
+      parsed.mod.imports.$add({ from: LINTING_PACKAGE, imported: name, local: name });
+    }
   }
 };
 
@@ -369,7 +380,8 @@ const updateQuery = (
   answers: InitAnswers,
 ): boolean => {
   return (
-    queryNeedsUpdate(existing, answers, parsed.local) && replaceEntry(parsed, 'query', answers)
+    queryNeedsUpdate(existing, answers, localName(parsed, 'query')) &&
+    replaceEntry(parsed, 'query', answers)
   );
 };
 
@@ -378,7 +390,7 @@ const GLOBALS_STATE = {
   node: ['nodeIgnores', 'nodeEditable'],
 } as const;
 
-/** Rewrites `configs.browser()` / `configs.node()` globs when they changed. */
+/** Rewrites `browserPreset()` / `nodePreset()` globs when they changed. */
 const updateGlobals = (
   parsed: ParsedConfig,
   existing: ExistingConfig,
@@ -386,10 +398,11 @@ const updateGlobals = (
 ): GlobalsPreset[] =>
   (['browser', 'node'] as const).filter((preset) => {
     const [globsKey, editableKey] = GLOBALS_STATE[preset];
+    const local = localName(parsed, preset);
     const options = globsOptions(GLOBALS_OPTION_KEYS[preset], existing[globsKey]);
     const changed =
       answers.environment !== undefined &&
-      `${parsed.local}.${preset}(${options})` !== presetExpression(preset, answers, parsed.local);
+      `${local}(${options})` !== presetExpression(preset, answers, local);
     return (
       answers.presets.includes(preset) &&
       existing.presets.includes(preset) &&

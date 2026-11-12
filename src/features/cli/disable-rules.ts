@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import * as clack from '@clack/prompts';
 import { builders, generateCode, parseModule, type ASTNode } from 'magicast';
+import { LINTING_PACKAGE, presetExport } from './generate';
 
 /** Comment that marks the config entry with the rules disabled by `analyze`. */
 export const DISABLE_RULES_COMMENT = 'disable-rules';
@@ -89,32 +90,27 @@ const mergeRules = (section: ObjectNode, ruleIds: string[]): boolean => {
   return true;
 };
 
-const isPrettierSpread = (element: ElementNode | null): boolean => {
+const isPrettierSpread = (element: ElementNode | null, local: string): boolean => {
   if (element?.type !== 'SpreadElement') {
     return false;
   }
   const { argument } = element;
-  const member = argument.type === 'CallExpression' ? argument.callee : argument;
-  return (
-    member.type === 'MemberExpression' &&
-    !member.computed &&
-    member.property.type === 'Identifier' &&
-    member.property.name === 'prettier'
-  );
+  const callee = argument.type === 'CallExpression' ? argument.callee : argument;
+  return callee.type === 'Identifier' && callee.name === local;
 };
 
 /** The new section: `// disable-rules` followed by `{ rules: { 'rule': 'off' } }`. */
 export const disableRulesSection = (ruleIds: string[]): string =>
   `// ${DISABLE_RULES_COMMENT}\n{\n  rules: {\n${offRules(ruleIds)}\n  },\n},`;
 
-const insertSection = (array: ArrayNode, ruleIds: string[]): void => {
+const insertSection = (array: ArrayNode, ruleIds: string[], prettierLocal: string): void => {
   const section = rawElement(`{\n  rules: {\n${offRules(ruleIds)}\n  },\n}`);
   Object.assign(section, {
     comments: [
       { type: 'CommentLine', value: ` ${DISABLE_RULES_COMMENT}`, leading: true, trailing: false },
     ],
   });
-  const prettier = array.elements.findIndex((element) => isPrettierSpread(element));
+  const prettier = array.elements.findIndex((element) => isPrettierSpread(element, prettierLocal));
   array.elements.splice(prettier === -1 ? array.elements.length : prettier, 0, section);
 };
 
@@ -122,7 +118,11 @@ const parseArray = (text: string) => {
   try {
     const mod = parseModule(text);
     const array = configArray(mod.exports.default.$ast);
-    return array ? { mod, array } : undefined;
+    const prettierLocal =
+      mod.imports.$items.find(
+        ({ from, imported }) => from === LINTING_PACKAGE && imported === presetExport('prettier'),
+      )?.local ?? presetExport('prettier');
+    return array ? { mod, array, prettierLocal } : undefined;
   } catch {
     return;
   }
@@ -130,7 +130,7 @@ const parseArray = (text: string) => {
 
 /**
  * Turns the rules off in the `// disable-rules` entry of an ESLint flat config, adding the entry
- * before `...configs.prettier` (or at the end) when it's missing. Returns undefined when the config
+ * before `...prettierPreset()` (or at the end) when it's missing. Returns undefined when the config
  * doesn't export an array (or `defineConfig([...])`), or its section has no `rules` object.
  */
 export const disableRules = (text: string, ruleIds: string[]): string | undefined => {
@@ -144,7 +144,7 @@ export const disableRules = (text: string, ruleIds: string[]): string | undefine
       return undefined;
     }
   } else {
-    insertSection(parsed.array, ruleIds);
+    insertSection(parsed.array, ruleIds, parsed.prettierLocal);
   }
   const code = generateCode(parsed.mod, { format: { wrapColumn: 0, trailingComma: true } }).code;
   return text.endsWith('\n') && !code.endsWith('\n') ? `${code}\n` : code;
@@ -166,7 +166,7 @@ export const writeDisabledRules = async (
   if (!configFile || updated === undefined) {
     const name = configFile ? path.relative(projectDir, configFile) : 'the ESLint config';
     clack.log.warn(`Can't update ${name} automatically; disable the rules manually.`);
-    clack.note(disableRulesSection(ruleIds), `Add before ...configs.prettier in ${name}`);
+    clack.note(disableRulesSection(ruleIds), `Add before ...prettierPreset() in ${name}`);
     return false;
   }
   writeFileSync(configFile, updated);

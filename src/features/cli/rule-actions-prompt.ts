@@ -10,7 +10,7 @@ export type RuleAction = 'keep' | 'disable' | 'ignore';
 export const RULE_ACTIONS: readonly RuleAction[] = ['keep', 'disable', 'ignore'];
 
 /** A rule that can be disabled or ignored, with a hint such as its problem counts. */
-export type RuleChoice = { ruleId: string; hint: string };
+export type RuleChoice = { number?: number; ruleId: string; hint: string };
 
 const ACTION_LABELS: Record<RuleAction, string> = {
   keep: 'keep',
@@ -75,10 +75,19 @@ export const moveRuleActions = (
   return state;
 };
 
-const row = (choice: RuleChoice, action: RuleAction, active: boolean): string => {
+const row = (
+  choice: RuleChoice,
+  action: RuleAction,
+  active: boolean,
+  numberWidth: number,
+): string => {
   const label = styleText(ACTION_COLORS[action], ACTION_LABELS[action].padEnd(ACTION_WIDTH));
   const pointer = active ? styleText('cyan', '❯') : ' ';
-  const rule = active ? choice.ruleId : styleText('dim', choice.ruleId);
+  const numbered =
+    choice.number === undefined
+      ? choice.ruleId
+      : `${`${choice.number}.`.padStart(numberWidth + 1)} ${choice.ruleId}`;
+  const rule = active ? numbered : styleText('dim', numbered);
   return `${pointer} ${label}  ${rule} ${styleText('dim', `(${choice.hint})`)}`;
 };
 
@@ -135,6 +144,7 @@ export const renderRuleActions = (options: RenderOptions): string => {
   ]
     .map((line) => (line === '' ? `${side}\n` : `${side}  ${line}\n`))
     .join('');
+  const numberWidth = Math.max(0, ...choices.map(({ number }) => String(number ?? '').length));
   const rows = limitOptions({
     output,
     options: choices.map((choice, index) => ({ choice, index })),
@@ -142,7 +152,7 @@ export const renderRuleActions = (options: RenderOptions): string => {
     maxItems: 15,
     rowPadding: header.split('\n').length + editIgnores.split('\n').length + 1,
     style: ({ choice, index }) =>
-      row(choice, state.actions[index] ?? 'keep', index === state.cursor - 1),
+      row(choice, state.actions[index] ?? 'keep', index === state.cursor - 1, numberWidth),
   });
   const body = rows.map((line) => `${side}  ${line}`).join('\n');
   return `${header}${editIgnores}${body}\n${side}  ${styleText('dim', INSTRUCTIONS)}\n${styleText('cyan', S_BAR_END)}\n`;

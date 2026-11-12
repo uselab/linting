@@ -13,33 +13,34 @@ import { vueA11yPreset } from '../features/eslint-presets/vue-a11y';
 import { templateStructurePlugin } from '../support/eslint-plugins/template-structure';
 
 /**
- * Composable Uselab ESLint presets. Spread the ones you need into your eslint.config:
+ * Composable Uselab ESLint presets. Import the ones you need and spread them into your
+ * eslint.config:
  *
  * ```ts
  * export default [
  *   globalIgnores(['**\/dist/**', '**\/node_modules/**', ...]), // from 'eslint/config'
- *   ...configs.javascript(),
- *   ...configs.typescript(),
- *   ...configs.vue(),
- *   ...configs.browser(), // or browser({ files: ['src/**'] }) + node({ ignores: ['src/**'] })
- *   ...configs.aliases(), // only when the bundler resolves the path aliases (e.g. Vite)
- *   ...configs.node(), // after aliases: Node files may use relative imports
- *   ...configs.prettier(), // always last
+ *   ...javascriptPreset(),
+ *   ...typescriptPreset(),
+ *   ...vuePreset(),
+ *   ...browserPreset(), // or browserPreset({ files: ['src/**'] }) + nodePreset({ ignores: ['src/**'] })
+ *   ...aliasesPreset(), // only when the bundler resolves the path aliases (e.g. Vite)
+ *   ...nodePreset(), // after aliases: Node files may use relative imports
+ *   ...prettierPreset, // always last
  * ];
  * ```
  */
-export const configs = {
-  javascript,
-  typescript,
-  vue,
-  vueA11y: vueA11yPreset,
-  react,
-  query,
-  browser,
-  node,
-  aliases,
-  boundaries,
-  prettier,
+export {
+  aliases as aliasesPreset,
+  boundaries as boundariesPreset,
+  browser as browserPreset,
+  javascript as javascriptPreset,
+  node as nodePreset,
+  prettier as prettierPreset,
+  query as queryPreset,
+  react as reactPreset,
+  typescript as typescriptPreset,
+  vue as vuePreset,
+  vueA11yPreset,
 };
 
 export const plugins: Record<'templateStructure', ESLint.Plugin> = {

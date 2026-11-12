@@ -1,11 +1,11 @@
 import { globalIgnores } from 'eslint/config';
 import { describe, expect, it } from 'vitest';
-import { configs, DEFAULT_IGNORES } from '../../src/app';
+import { DEFAULT_IGNORES, javascriptPreset } from '../../src/app';
 import { isIgnored } from '../helpers';
 
 const withIgnores = (scope: string[] = []) => [
   globalIgnores([...scope, ...DEFAULT_IGNORES]),
-  ...configs.javascript(),
+  ...javascriptPreset(),
 ];
 
 describe('globalIgnores() with DEFAULT_IGNORES', () => {

@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { configs } from '../../src/app';
+import { javascriptPreset, typescriptPreset, vueA11yPreset, vuePreset } from '../../src/app';
 import { configForFile, lintRule, severityOf } from '../helpers';
 
-const config = [
-  ...configs.javascript(),
-  ...configs.typescript(),
-  ...configs.vue(),
-  ...configs.vueA11y(),
-];
+const config = [...javascriptPreset(), ...typescriptPreset(), ...vuePreset(), ...vueA11yPreset()];
 const FILE = 'src/components/user-card.vue';
 
 const sfc = (template: string): string =>
@@ -31,7 +26,7 @@ describe('vuejs-accessibility preset', () => {
   });
 
   it('is not active without the preset', async () => {
-    const resolved = await configForFile([...configs.javascript(), ...configs.vue()], FILE);
+    const resolved = await configForFile([...javascriptPreset(), ...vuePreset()], FILE);
     expect(severityOf(resolved, 'vuejs-accessibility/alt-text') ?? 0).toBe(0);
   });
 });

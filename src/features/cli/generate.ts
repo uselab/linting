@@ -135,7 +135,9 @@ export const prettierConfigFile = (isModulePackage: boolean): string =>
 /** Generated Prettier config files, of which an existing one is kept and reused. */
 export const PRETTIER_CONFIG_FILES = [prettierConfigFile(true), prettierConfigFile(false)];
 
-export const SHARED_PRETTIER_CONFIG = '@uselab/linting/prettier';
+export const LINTING_PACKAGE = '@uselab/linting';
+
+export const SHARED_PRETTIER_CONFIG = `${LINTING_PACKAGE}/prettier`;
 
 const quote = (value: string): string =>
   `'${value.replaceAll('\\', '\\\\').replaceAll("'", String.raw`\'`)}'`;
@@ -145,10 +147,6 @@ const sameList = (a: readonly string[], b: readonly string[]): boolean =>
 
 const isDefaultSrcDirs = (srcDirs: string[]): boolean =>
   sameList(srcDirs, DEFAULT_BOUNDARIES_SRC_DIRS);
-
-/** Whether the test globs are the default ones (or not set). An empty list means no test files. */
-export const isDefaultTestFiles = (testFiles: readonly string[] | undefined): boolean =>
-  testFiles === undefined || sameList(testFiles, DEFAULT_TEST_FILES);
 
 const stringOrArray = (value: string | string[]): string =>
   Array.isArray(value) ? `[${value.map(quote).join(', ')}]` : quote(value);
@@ -169,7 +167,7 @@ const boundariesOptions = (answers: BoundariesAnswers = {}): string => {
 };
 
 const javascriptOptions = (answers: JavaScriptAnswers = {}): string =>
-  answers.testFiles === undefined || isDefaultTestFiles(answers.testFiles)
+  answers.testFiles === undefined || answers.testFiles.length === 0
     ? ''
     : `{ testFiles: ${stringOrArray(answers.testFiles)} }`;
 
@@ -226,33 +224,49 @@ export const ignoresExpression = (
   return [`${local}([`, ...lines, '])'].join('\n');
 };
 
+/** Comment above the global ignores entry, reflecting the chosen lint scope. */
+const ignoresComment = (answers: IgnoresAnswers | undefined): string => {
+  if (answers?.mode === 'only') {
+    return '// Lint scope: opt-in, only the listed paths are linted (the defaults stay ignored).';
+  }
+  if (answers?.mode === 'exclude') {
+    return '// Lint scope: opt-out, everything is linted except the listed paths and the defaults.';
+  }
+  return '// Lint scope: all files are linted, except the defaults.';
+};
+
 /** The global ignores entry of the generated config. */
 const ignoresLines = (answers: IgnoresAnswers | undefined): string[] =>
-  `${ignoresExpression(answers)},`.split('\n').map((line) => `  ${line}`);
+  [ignoresComment(answers), ...`${ignoresExpression(answers)},`.split('\n')].map(
+    (line) => `  ${line}`,
+  );
+
+/** Name `@uselab/linting` exports a preset as, e.g. `javascriptPreset`. */
+export const presetExport = (preset: PresetId): string => `${preset}Preset`;
 
 /**
- * Expression of a preset, e.g. `configs.typescript()`, `configs.javascript({ ... })` or
- * `configs.boundaries({ ... })`.
+ * Expression of a preset, e.g. `typescriptPreset()`, `javascriptPreset({ ... })` or
+ * `boundariesPreset({ ... })`. `local` is the name the preset is imported as.
  */
 export const presetExpression = (
   preset: PresetId,
   answers: InitAnswers,
-  local = 'configs',
+  local = presetExport(preset),
 ): string => {
   if (preset === 'boundaries') {
-    return `${local}.boundaries(${boundariesOptions(answers.boundaries)})`;
+    return `${local}(${boundariesOptions(answers.boundaries)})`;
   }
   if (preset === 'query') {
-    return `${local}.query(${queryOptions(answers.query)})`;
+    return `${local}(${queryOptions(answers.query)})`;
   }
   if (preset === 'javascript') {
-    return `${local}.javascript(${javascriptOptions(answers.javascript)})`;
+    return `${local}(${javascriptOptions(answers.javascript)})`;
   }
   if (preset === 'browser' || preset === 'node') {
     const options = globsOptions(GLOBALS_OPTION_KEYS[preset], browserGlobs(answers.environment));
-    return `${local}.${preset}(${options})`;
+    return `${local}(${options})`;
   }
-  return `${local}.${preset}()`;
+  return preset === 'prettier' ? local : `${local}()`;
 };
 
 /** Returns the presets in the canonical order, without duplicates. */
@@ -261,13 +275,16 @@ export const orderPresets = (presets: readonly PresetId[]): PresetId[] =>
 
 /** Content of the generated `eslint.config.ts` / `eslint.config.mts`. */
 export const generateEslintConfig = (answers: InitAnswers): string => {
+  const presets = orderPresets(answers.presets);
   const lines = [
     `import { ${GLOBAL_IGNORES} } from '${GLOBAL_IGNORES_MODULE}';`,
-    "import { configs } from '@uselab/linting';",
+    ...(presets.length > 0
+      ? [`import { ${presets.map(presetExport).join(', ')} } from '${LINTING_PACKAGE}';`]
+      : []),
     '',
     'export default [',
     ...ignoresLines(answers.ignores),
-    ...orderPresets(answers.presets).map((preset) => presetLine(preset, answers)),
+    ...presets.map((preset) => presetLine(preset, answers)),
     '];',
     '',
   ];

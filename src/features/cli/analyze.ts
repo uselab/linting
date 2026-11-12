@@ -397,8 +397,10 @@ const offerMarkdownReport = async (projectDir: string, analysis: Analysis): Prom
 
 const ruleChoices = ({ rules }: Analysis): RuleChoice[] =>
   rules
-    .filter(({ ruleId }) => ruleId !== PARSE_ERROR_RULE)
-    .map((rule) => ({
+    .map((rule, index) => ({ rule, number: index + 1 }))
+    .filter(({ rule }) => rule.ruleId !== PARSE_ERROR_RULE)
+    .map(({ rule, number }) => ({
+      number,
       ruleId: rule.ruleId,
       hint: `${describeCounts(rule)} in ${plural(rule.files.length, 'file')}`,
     }));

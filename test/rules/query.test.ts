@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { configs } from '../../src/app';
+import {
+  aliasesPreset,
+  browserPreset,
+  javascriptPreset,
+  nodePreset,
+  queryPreset,
+} from '../../src/app';
 import { byRule, lintSnippet } from '../helpers';
 
-const lint = (config: ReturnType<typeof configs.query>, file: string, code: string) =>
-  lintSnippet([...configs.javascript(), ...config], file, code);
+const lint = (config: ReturnType<typeof queryPreset>, file: string, code: string) =>
+  lintSnippet([...javascriptPreset(), ...config], file, code);
 
 describe('query preset', () => {
-  const config = configs.query({ library: 'vue-query' });
+  const config = queryPreset({ library: 'vue-query' });
 
   it.each([
     ['no-restricted-globals', 'fetch("/api");'],
@@ -29,7 +35,7 @@ describe('query preset', () => {
   });
 
   it('supports a custom allow list and a generic message without library', async () => {
-    const custom = configs.query({ allow: ['src/api/**'] });
+    const custom = queryPreset({ allow: ['src/api/**'] });
     expect(
       byRule(await lint(custom, 'src/api/a.js', 'fetch("/");'), 'no-restricted-globals'),
     ).toEqual([]);
@@ -41,8 +47,8 @@ describe('query preset', () => {
   });
 
   it.each([
-    ['before', [...configs.query(), ...configs.browser()]],
-    ['after', [...configs.browser(), ...configs.query()]],
+    ['before', [...queryPreset(), ...browserPreset()]],
+    ['after', [...browserPreset(), ...queryPreset()]],
   ])('keeps the browser setAttribute rule when placed %s browser', async (_, combined) => {
     const messages = await lintSnippet(combined, 'src/a.js', 'el.setAttribute("a", "b");');
     expect(byRule(messages, 'no-restricted-properties')).toHaveLength(1);
@@ -50,7 +56,7 @@ describe('query preset', () => {
 
   it('does not clash with the aliases preset', async () => {
     const messages = await lintSnippet(
-      [...configs.aliases(), ...configs.query(), ...configs.node()],
+      [...aliasesPreset(), ...queryPreset(), ...nodePreset()],
       'src/a.js',
       "import axios from 'axios';\nimport b from '../b';",
     );

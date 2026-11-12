@@ -1,9 +1,9 @@
 import reactHooks from 'eslint-plugin-react-hooks';
 import { describe, expect, it } from 'vitest';
-import { configs } from '../../src/app';
+import { javascriptPreset, reactPreset, typescriptPreset } from '../../src/app';
 import { byRule, configForFile, lintRule, lintSnippet, severityOf } from '../helpers';
 
-const config = [...configs.javascript(), ...configs.typescript(), ...configs.react()];
+const config = [...javascriptPreset(), ...typescriptPreset(), ...reactPreset()];
 const FILE = 'src/components/user-card.tsx';
 
 describe('no-restricted-syntax in JSX files', () => {

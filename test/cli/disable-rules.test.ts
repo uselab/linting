@@ -1,24 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { disableRules, disableRulesSection } from '../../src/features/cli/disable-rules';
 
-const uselabConfig = `import { configs } from '@uselab/linting';
+const uselabConfig = `import { javascriptPreset, prettierPreset } from '@uselab/linting';
 
 export default [
-  ...configs.javascript(),
+  ...javascriptPreset(),
   {
     rules: { 'no-var': 'error' },
   },
-  ...configs.prettier(),
+  ...prettierPreset,
 ];
 `;
 
 describe('disableRules', () => {
   it('adds a disable-rules section before the prettier preset', () => {
     expect(disableRules(uselabConfig, ['vue/no-setup-props-reactivity-loss', 'complexity']))
-      .toBe(`import { configs } from '@uselab/linting';
+      .toBe(`import { javascriptPreset, prettierPreset } from '@uselab/linting';
 
 export default [
-  ...configs.javascript(),
+  ...javascriptPreset(),
   {
     rules: { 'no-var': 'error' },
   },
@@ -29,7 +29,7 @@ export default [
       complexity: 'off',
     },
   },
-  ...configs.prettier(),
+  ...prettierPreset,
 ];
 `);
   });

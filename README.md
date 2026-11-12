@@ -49,44 +49,54 @@ An **Edit ESLint ignore configuration** row lets you change the `globalIgnores()
 
 ## Usage
 
-Spread the presets you need into `eslint.config.ts`, after the [global ignores](#ignores). **`configs.prettier()` must be last.**
+Spread the presets you need into `eslint.config.ts`, after the [global ignores](#ignores). **`prettierPreset` must be last.**
 
 ### Vue + TypeScript
 
 ```ts
 import { globalIgnores } from 'eslint/config';
-import { configs } from '@uselab/linting';
+import {
+  aliasesPreset,
+  boundariesPreset,
+  browserPreset,
+  javascriptPreset,
+  nodePreset,
+  prettierPreset,
+  typescriptPreset,
+  vuePreset,
+} from '@uselab/linting';
 
 export default [
+  // Lint scope: all files are linted, except the defaults.
   globalIgnores(['**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo']),
-  ...configs.javascript(),
-  ...configs.typescript(),
-  ...configs.vue(),
-  ...configs.browser({ files: ['src/**'] }), // browser globals for the app code
-  ...configs.node({ ignores: ['src/**'] }), // Node globals for everything else
-  ...configs.aliases(), // Vite resolves the path aliases
-  ...configs.boundaries({ tsconfig: 'tsconfig.app.json' }), // optional
-  ...configs.prettier(),
+  ...javascriptPreset(),
+  ...typescriptPreset(),
+  ...vuePreset(),
+  ...browserPreset({ files: ['src/**'] }), // browser globals for the app code
+  ...nodePreset({ ignores: ['src/**'] }), // Node globals for everything else
+  ...aliasesPreset(), // Vite resolves the path aliases
+  ...boundariesPreset({ tsconfig: 'tsconfig.app.json' }), // optional
+  ...prettierPreset,
 ];
 ```
 
 ### React + TypeScript
 
-Same as Vue, with `...configs.react()` instead of `...configs.vue()` (and without `aliases` unless a bundler resolves them).
+Same as Vue, with `...reactPreset()` instead of `...vuePreset()` (and without `aliasesPreset` unless a bundler resolves them).
 
 ### Node (TypeScript or JavaScript)
 
-Use `...configs.javascript()`, `...configs.typescript()` (omit for plain JS), `...configs.node()` and `...configs.prettier()`.
+Use `...javascriptPreset()`, `...typescriptPreset()` (omit for plain JS), `...nodePreset()` and `...prettierPreset`.
 
 ### Overriding rules
 
-Add your own config objects after the presets, before `configs.prettier()`:
+Add your own config objects after the presets, before `prettierPreset`:
 
 ```ts
 export default [
-  ...configs.javascript(),
+  ...javascriptPreset(),
   { files: ['src/legacy/**'], rules: { complexity: 'off' } },
-  ...configs.prettier(),
+  ...prettierPreset,
 ];
 ```
 
@@ -119,11 +129,11 @@ Prettier loads TypeScript configs since 3.5 (Node 22.18+).
 | `node(options?)`       | Node globals.                                                                                                                                                         |
 | `aliases(options?)`    | Bundler projects only: no `../x` imports; use [path aliases](#path-aliases).                                                                                          |
 | `boundaries(options?)` | The fixed `app` / `features` / `support` [project structure](#project-structure-boundaries). Options: `srcDirs`, `tsconfig`.                                          |
-| `prettier(options?)`   | `eslint-config-prettier`. Always last.                                                                                                                                |
+| `prettier`             | `eslint-config-prettier`, a plain config array (no options): always last, applies to all files. Exclude files from formatting in `.prettierignore`.                   |
 
 ### Options for all presets
 
-Every preset is a function and accepts the same base options (`PresetOptions`, exported from `@uselab/linting`). Presets with their own options extend it.
+Every preset except `prettier` is a function and accepts the same base options (`PresetOptions`, exported from `@uselab/linting`). Presets with their own options extend it.
 
 | Option    | Meaning                                                                                                                                     |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -131,12 +141,12 @@ Every preset is a function and accepts the same base options (`PresetOptions`, e
 | `ignores` | Globs the preset skips.                                                                                                                     |
 
 ```ts
-configs.typescript({ files: ['src/**'], ignores: ['src/legacy/**'] });
+typescriptPreset({ files: ['src/**'], ignores: ['src/legacy/**'] });
 ```
 
 ### Query libraries
 
-`configs.query({ library })` bans `fetch` (and `window/globalThis/self.fetch`) and imports of axios, ky, got, superagent, node-fetch and ofetch, so requests go through a query library. Raw HTTP stays allowed in `allow` (default `['src/support/http/**']`).
+`queryPreset({ library })` bans `fetch` (and `window/globalThis/self.fetch`) and imports of axios, ky, got, superagent, node-fetch and ofetch, so requests go through a query library. Raw HTTP stays allowed in `allow` (default `['src/support/http/**']`).
 
 | Framework | `library`                                     |
 | --------- | --------------------------------------------- |
@@ -181,10 +191,10 @@ Keep the defaults after your patterns, and opt-in exclusions after the globs the
 
 ### Test files
 
-Test files (default `test/**`) have `max-lines` and `max-lines-per-function` turned off. Pass `testFiles` to replace the default:
+Test files have `max-lines` and `max-lines-per-function` turned off. There is no default: pass `testFiles` to enable it (the CLI suggests `test/**`):
 
 ```ts
-...configs.javascript({ testFiles: ['test/**', '**/*.{test,spec}.{js,ts}'] }),
+...javascriptPreset({ testFiles: ['test/**', '**/*.{test,spec}.{js,ts}'] }),
 ```
 
 ### Dev mode
@@ -255,7 +265,7 @@ Imports are checked by `boundaries/dependencies` (static, `export ... from`, dyn
 #### Multiple src folders
 
 ```ts
-configs.boundaries({ srcDirs: ['apps/web/src', 'apps/admin/src'] });
+boundariesPreset({ srcDirs: ['apps/web/src', 'apps/admin/src'] });
 ```
 
 Each src folder has its own layout and is isolated: files may not import from another src folder. Share code through a package.

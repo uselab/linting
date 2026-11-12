@@ -54,11 +54,11 @@ const DEFAULTS = "'**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo'";
 const uselabConfig = (ignores: string): string =>
   [
     "import { globalIgnores } from 'eslint/config';",
-    "import { configs as uselab } from '@uselab/linting';",
+    "import { javascriptPreset as uselab } from '@uselab/linting';",
     '',
     'export default [',
     `  globalIgnores([${ignores}]),`,
-    '  ...uselab.javascript(),',
+    '  ...uselab(),',
     "  { rules: { 'no-console': 'off' } },",
     '];',
     '',

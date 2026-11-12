@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { configs } from '../../src/app';
+import { aliasesPreset, javascriptPreset, nodePreset } from '../../src/app';
 import { lintRule } from '../helpers';
 
-const config = [...configs.javascript(), ...configs.aliases()];
+const config = [...javascriptPreset(), ...aliasesPreset()];
 const FILE = 'src/some-file.js';
 
 describe('no-restricted-imports (no parent-relative imports)', () => {
@@ -27,7 +27,7 @@ describe('no-restricted-imports (no parent-relative imports)', () => {
 
 describe('with the node preset after aliases', () => {
   const lintNode = lintRule(
-    [...configs.javascript(), ...configs.aliases(), ...configs.node({ ignores: ['src/web/**'] })],
+    [...javascriptPreset(), ...aliasesPreset(), ...nodePreset({ ignores: ['src/web/**'] })],
     'no-restricted-imports',
   );
 

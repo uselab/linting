@@ -1,11 +1,17 @@
 import { globalIgnores } from 'eslint/config';
-import { configs } from '@uselab/linting';
+import {
+  boundariesPreset,
+  javascriptPreset,
+  nodePreset,
+  prettierPreset,
+  typescriptPreset,
+} from '@uselab/linting';
 
 export default [
   globalIgnores(['**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo']),
-  ...configs.javascript(),
-  ...configs.typescript(),
-  ...configs.node(),
+  ...javascriptPreset(),
+  ...typescriptPreset(),
+  ...nodePreset(),
   {
     // Small flat library without path aliases; the parent-import ban targets app code.
     rules: {
@@ -18,6 +24,6 @@ export default [
       'max-lines-per-function': 'off',
     },
   },
-  ...configs.boundaries({ tsconfig: 'tsconfig.json' }),
-  ...configs.prettier(),
+  ...boundariesPreset({ tsconfig: 'tsconfig.json' }),
+  ...prettierPreset,
 ];

@@ -1,9 +1,9 @@
 import type { Linter } from 'eslint';
 import { describe, expect, it } from 'vitest';
-import { configs } from '../../src/app';
-import { byRule, configForFile, lintRule, lintSnippet, loadConfigs, severityOf } from '../helpers';
+import { javascriptPreset, typescriptPreset } from '../../src/app';
+import { byRule, configForFile, lintRule, lintSnippet, loadPresets, severityOf } from '../helpers';
 
-const config = [...configs.javascript(), ...configs.typescript()];
+const config = [...javascriptPreset(), ...typescriptPreset()];
 const FILE = 'src/some-file.ts';
 
 const applyFix = (code: string, message: Linter.LintMessage | undefined): string => {
@@ -86,8 +86,11 @@ describe('no-unused-vars swap', () => {
     ['local (no CI)', { CI: '', NODE_ENV: '' }, 1],
     ['CI', { CI: 'true', NODE_ENV: 'production' }, 2],
   ])('uses dev-mode severity: %s', async (_label, env, expected) => {
-    const loaded = await loadConfigs(env);
-    const resolved = await configForFile([...loaded.javascript(), ...loaded.typescript()], FILE);
+    const loaded = await loadPresets(env);
+    const resolved = await configForFile(
+      [...loaded.javascriptPreset(), ...loaded.typescriptPreset()],
+      FILE,
+    );
     expect(severityOf(resolved, '@typescript-eslint/no-unused-vars')).toBe(expected);
   });
 });
