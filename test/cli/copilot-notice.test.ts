@@ -17,12 +17,10 @@ vi.mock('@clack/prompts', () => ({
   },
 }));
 
-const { confirmCopilotStart, resetCopilotNotice } =
-  await import('../../src/features/cli/copilot-notice');
+const { confirmCopilotStart } = await import('../../src/features/cli/copilot-notice');
 
 describe('confirmCopilotStart', () => {
   beforeEach(() => {
-    resetCopilotNotice();
     prompts.answers = [];
     prompts.selects = 0;
     prompts.notes = [];
@@ -35,13 +33,6 @@ describe('confirmCopilotStart', () => {
     expect(prompts.selects).toBe(2);
     expect(prompts.notes[0]).toContain('/exit');
     expect(prompts.notes[0]).toContain('return to this CLI');
-  });
-
-  it("stops asking after Ok, don't ask me again", async () => {
-    prompts.answers = ['always'];
-    expect(await confirmCopilotStart()).toBe(true);
-    expect(await confirmCopilotStart()).toBe(true);
-    expect(prompts.selects).toBe(1);
   });
 
   it('does not start on No or cancel', async () => {
