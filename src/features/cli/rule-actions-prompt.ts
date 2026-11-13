@@ -1,7 +1,7 @@
 import * as clack from '@clack/prompts';
 
 /** What to do with the problems of a rule. */
-export type RuleAction = 'disable' | 'ignore' | 'editIgnores' | 'skip' | 'finish';
+export type RuleAction = 'copilot' | 'disable' | 'ignore' | 'editIgnores' | 'skip' | 'finish';
 
 /** A rule that can be disabled or ignored, with a hint such as its problem counts. */
 export type RuleChoice = { ruleId: string; hint: string };
@@ -16,6 +16,11 @@ export const EDIT_IGNORES_EXPLANATION =
 
 const options = (ruleId: string): { value: RuleAction; label: string; hint: string }[] => [
   { value: 'skip', label: 'Skip this rule', hint: 'I will fix this myself' },
+  {
+    value: 'copilot',
+    label: 'Fix with Copilot',
+    hint: 'starts Copilot CLI to fix only the problems of this rule',
+  },
   {
     value: 'ignore',
     label: 'Ignore with comments',

@@ -42,11 +42,20 @@ Lints the project like the `lint` script and lists the rules that report problem
 In an interactive terminal you get one rule per cycle: the most relevant one (the top of the list). Choose what to do with it:
 
 - **skip**: leave the rule as is (you fix it yourself) and show the next one;
+- **fix with Copilot**: starts the [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) (`copilot`, which must be installed; otherwise an error is shown and the rule is skipped) with a prompt to fix only the problems of this rule, without shortcuts such as disabling the rule. If it has difficulty, it asks you for permission to comment a problem out. Copilot verifies its work with `uselab-linting check <rule>`; Before Copilot starts you are told that you return to the CLI when it is done and that you leave it with `/exit`; choose "Ok", "Ok, don't ask me again" (for the rest of the run) or "No" (back to the menu). Copilot may edit the files with problems without asking, other files need your permission. It writes a commit message that is used as the default in the commit offer. Type `/exit` when it is done; the flow then continues (commit offer, ESLint re-run, next rule);
 - **ignore with comments**: add `eslint-disable-next-line` comments above the existing problems; the rule stays active for new code;
 - **disable**: turn the rule off in a `// disable-rules` entry of the ESLint config;
 - **edit ESLint ignore configuration**: change the `globalIgnores()` scope.
 
 Esc stops and continues to the report. The report shows only the rule being asked about. After a change ESLint re-runs and the next top rule is offered. Remaining problems can be written to `LINT-ANALYSIS.md`. Exits with 1 when the final report contains errors.
+
+### Check
+
+```sh
+npx uselab-linting check <rule> [dir]
+```
+
+Lints the project and lists only the problems of one rule (e.g. `@typescript-eslint/no-explicit-any`). Exits with 1 when there are any. Used by the Copilot fix action.
 
 ### Commit prompts
 

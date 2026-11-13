@@ -3,11 +3,13 @@ import path from 'node:path';
 import * as clack from '@clack/prompts';
 import type { Problem } from './analyze';
 import { disabledCommitOffer, type CommitOffer } from './commit-offer';
+import { runCopilotFix } from './copilot-fix';
+import { confirmCopilotStart } from './copilot-notice';
 import { findEslintConfigFile, writeDisabledRules } from './disable-rules';
 import { readEslintConfig, updateEslintIgnores } from './eslint-config';
 import { ignoreProblems } from './ignore-comments';
 import { askScopeGlobs } from './prompts';
-import { askRuleAction, type RuleChoice } from './rule-actions-prompt';
+import { askRuleAction, type RuleAction, type RuleChoice } from './rule-actions-prompt';
 
 const ignoreRules = (projectDir: string, ruleIds: string[], problems: Problem[]): boolean => {
   const { files, comments, skipped } = ignoreProblems(
@@ -72,10 +74,68 @@ export const editGlobalIgnores = async (projectDir: string): Promise<boolean> =>
 /** The outcome of handling one rule: the project changed, the rule was skipped, or stop. */
 export type RuleOutcome = 'changed' | 'skipped' | 'finished';
 
+type ChangeAction = Exclude<RuleAction, 'skip' | 'finish'>;
+type Step = [summary: string | (() => string), change: () => Promise<boolean> | boolean];
+
+/** The files with problems of the rule. */
+const ruleFiles = (ruleId: string, problems: Problem[]): string[] => [
+  ...new Set(problems.filter((problem) => problem.ruleId === ruleId).map(({ file }) => file)),
+];
+
+/** Fixes the rule with Copilot; its commit message becomes the default commit message. */
+const copilotStep = (projectDir: string, ruleId: string, problems: Problem[]): Step => {
+  let message: string | undefined;
+  return [
+    () => message ?? `Fixed ${ruleId} with Copilot`,
+    () => {
+      const result = runCopilotFix(projectDir, ruleId, ruleFiles(ruleId, problems));
+      message = result.message;
+      return result.ok;
+    },
+  ];
+};
+
+/** The commit summary and the change of an action that may change the project. */
+const stepFor = (
+  action: ChangeAction,
+  projectDir: string,
+  { ruleId, problems }: { ruleId: string; problems: Problem[] },
+): Step => {
+  const steps: Record<ChangeAction, Step> = {
+    copilot: copilotStep(projectDir, ruleId, problems),
+    disable: [
+      `Disabled ${ruleId} in the ESLint config`,
+      () => writeDisabledRules(projectDir, [ruleId]),
+    ],
+    ignore: [
+      `Added eslint-disable comments for ${ruleId}`,
+      () => ignoreRules(projectDir, [ruleId], problems),
+    ],
+    editIgnores: [
+      'Updated the lint scope in the ESLint config',
+      () => editGlobalIgnores(projectDir),
+    ],
+  };
+  return steps[action];
+};
+
+/** Whether to ask for an action again after an action that changed nothing. */
+const asksAgain = (action: ChangeAction, declined: boolean): boolean =>
+  declined || action === 'editIgnores';
+
+/** Whether the action may start. Copilot needs a clean tree first and the user's consent. */
+const mayStart = async (action: ChangeAction, commits: CommitOffer): Promise<boolean> => {
+  if (action !== 'copilot') {
+    return true;
+  }
+  await commits.ensureClean();
+  return confirmCopilotStart();
+};
+
 /**
- * Asks what to do with a single rule: disable it in the ESLint config, ignore its problems with
- * `eslint-disable-next-line` comments, edit the ignores, skip it or finish. When editing the
- * ignores changes nothing, it asks again.
+ * Asks what to do with a single rule: fix it with Copilot, disable it in the ESLint config, ignore
+ * its problems with `eslint-disable-next-line` comments, edit the ignores, skip it or finish. When
+ * editing the ignores changes nothing, or the Copilot notice is declined, it asks again.
  */
 export const applyRuleAction = async (
   projectDir: string,
@@ -87,22 +147,14 @@ export const applyRuleAction = async (
     if (action === 'skip' || action === 'finish') {
       return action === 'skip' ? 'skipped' : 'finished';
     }
+    const declined = !(await mayStart(action, commits));
     const changed =
-      action === 'disable'
-        ? await commits.step(`Disabled ${choice.ruleId} in the ESLint config`, () =>
-            writeDisabledRules(projectDir, [choice.ruleId]),
-          )
-        : action === 'ignore'
-          ? await commits.step(`Added eslint-disable comments for ${choice.ruleId}`, () =>
-              ignoreRules(projectDir, [choice.ruleId], problems),
-            )
-          : await commits.step('Updated the lint scope in the ESLint config', () =>
-              editGlobalIgnores(projectDir),
-            );
+      !declined &&
+      (await commits.step(...stepFor(action, projectDir, { ruleId: choice.ruleId, problems })));
     if (changed) {
       return 'changed';
     }
-    if (action !== 'editIgnores') {
+    if (!asksAgain(action, declined)) {
       return 'skipped';
     }
   }

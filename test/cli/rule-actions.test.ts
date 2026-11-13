@@ -14,7 +14,15 @@ const prompts = vi.hoisted(
     messages: string[];
     actions: string[];
     ruleActionsAsked: number;
-  } => ({ texts: [], asked: [], messages: [], actions: [], ruleActionsAsked: 0 }),
+    copilotConfirmed: number;
+  } => ({
+    texts: [],
+    asked: [],
+    messages: [],
+    actions: [],
+    ruleActionsAsked: 0,
+    copilotConfirmed: 0,
+  }),
 );
 
 vi.mock('@clack/prompts', () => {
@@ -39,6 +47,13 @@ vi.mock('../../src/features/cli/rule-actions-prompt', () => ({
   askRuleAction: async () => {
     prompts.ruleActionsAsked += 1;
     return prompts.actions.shift() ?? 'skip';
+  },
+}));
+
+vi.mock('../../src/features/cli/copilot-notice', () => ({
+  confirmCopilotStart: async () => {
+    prompts.copilotConfirmed += 1;
+    return false;
   },
 }));
 
@@ -74,6 +89,7 @@ describe('editGlobalIgnores', () => {
     prompts.messages = [];
     prompts.actions = [];
     prompts.ruleActionsAsked = 0;
+    prompts.copilotConfirmed = 0;
   });
 
   afterEach(() => {
@@ -208,6 +224,17 @@ describe('editGlobalIgnores', () => {
     );
 
     expect(config()).toContain("'no-var': 'off'");
+  });
+
+  it('returns to the menu without starting Copilot when the notice is declined', async () => {
+    prompts.actions = ['copilot', 'skip'];
+
+    expect(await applyRuleAction(dir, { ruleId: 'no-var', hint: '' }, { problems: [] })).toBe(
+      'skipped',
+    );
+
+    expect(prompts.copilotConfirmed).toBe(1);
+    expect(prompts.ruleActionsAsked).toBe(2);
   });
 
   it('finishes', async () => {

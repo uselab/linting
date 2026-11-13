@@ -8,11 +8,14 @@ export type CommitOffer = {
   /**
    * Runs a step that may change files. Before the first change of the CLI, the working tree must be
    * clean (see `ensureClean`). Afterwards, when git reports that the step changed something,
-   * offers to commit it with a default message based on `summary`.
+   * offers to commit it with a default message based on `summary`, which may be a function that is
+   * called once the change has run.
    */
-  step: <T>(summary: string, change: () => Promise<T> | T) => Promise<T>;
+  step: <T>(summary: string | (() => string), change: () => Promise<T> | T) => Promise<T>;
   /** Like `step`, for changes made already: call the returned function once they are made. */
   begin: () => (summary: string) => Promise<void>;
+  /** Requires a clean working tree now, e.g. before asking something that precedes a change. */
+  ensureClean: () => Promise<void>;
 };
 
 const COMMIT_MESSAGE = 'Commit message';
@@ -62,6 +65,7 @@ const commitExistingChanges = async (projectDir: string): Promise<void> => {
 export const disabledCommitOffer: CommitOffer = {
   step: async (_summary, change) => change(),
   begin: () => async () => {},
+  ensureClean: async () => {},
 };
 
 /**
@@ -123,11 +127,12 @@ export const createCommitOffer = (
 
   return {
     begin,
+    ensureClean,
     step: async (summary, change) => {
       await ensureClean();
       const finish = begin();
       const result = await change();
-      await finish(summary);
+      await finish(typeof summary === 'function' ? summary() : summary);
       return result;
     },
   };

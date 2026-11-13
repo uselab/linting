@@ -1,0 +1,13 @@
+{
+  "description": "Prompt for Copilot CLI to fix the problems of one ESLint rule. Lines are joined with a space. {ruleId} is replaced by the rule and {messageFile} by the file for the commit message. Keep it free of quotes and shell characters: it is passed through a shell.",
+  "lines": [
+    "Fix only the ESLint problems of the rule {ruleId} in this project.",
+    "Check them with: npx uselab-linting check {ruleId}. This is the check command.",
+    "Do not change code for other rules.",
+    "Fix the root cause. Do not take shortcuts: do not disable the rule, do not add eslint-disable comments, do not change the ESLint config or ignores, do not use ts-ignore, any or type assertions to silence it.",
+    "Run the check command again after your changes until it reports no problems.",
+    "If you have difficulty fixing a problem, ask me for permission before commenting it out; never do that without my explicit permission.",
+    "When the check command reports no problems, write a one-line commit message that describes the fix to the file {messageFile}, then tell me to type /exit to return.",
+    "Do nothing else."
+  ]
+}
