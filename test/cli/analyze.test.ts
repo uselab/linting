@@ -7,14 +7,12 @@ const prompts = vi.hoisted(
   (): {
     confirms: boolean[];
     messages: string[];
-    actions: Record<string, string>;
-    rounds: Record<string, string>[];
-    choices: string[][];
+    actions: string[];
+    choices: string[];
   } => ({
     confirms: [],
     messages: [],
-    actions: {},
-    rounds: [],
+    actions: [],
     choices: [],
   }),
 );
@@ -40,14 +38,10 @@ vi.mock('@clack/prompts', () => {
 });
 
 vi.mock('../../src/features/cli/rule-actions-prompt', () => ({
-  askRuleActions: async (choices: { ruleId: string; hint: string }[]) => {
-    prompts.messages.push('What to do with the rules?');
-    prompts.choices.push(choices.map(({ ruleId, hint }) => `${ruleId}: ${hint}`));
-    const actions = prompts.rounds.shift() ?? prompts.actions;
-    return {
-      actions: new Map(choices.map(({ ruleId }) => [ruleId, actions[ruleId] ?? 'keep'])),
-      editIgnores: false,
-    };
+  askRuleAction: async ({ ruleId, hint }: { ruleId: string; hint: string }) => {
+    prompts.messages.push(`Rule: ${ruleId}`);
+    prompts.choices.push(`${ruleId}: ${hint}`);
+    return prompts.actions.shift() ?? 'skip';
   },
 }));
 
@@ -57,6 +51,7 @@ const {
   codeExcerpt,
   formatMarkdownReport,
   formatTerminalReport,
+  formatTerminalReportBody,
   PARSE_ERROR_RULE,
   pickExamples,
   runAnalyze,
@@ -245,7 +240,40 @@ describe('reports', () => {
       ),
     );
     expect(report).toMatch(
-      /\n\n1 error in 1 rule\.\nAuto-fixable problems excluded: 1\.\n1 problem can be fixed automatically with `npm run lint:fix`\.$/u,
+      /\n\n1 error in 1 rule\.\n1 Auto-fixable problem excluded\.\n1 problem can be fixed automatically with `npm run lint:fix`\.$/u,
+    );
+  });
+
+  it('repeats the summary at the bottom only when the report is taller than the terminal', () => {
+    const rules = analyzeProblems([problem({ ruleId: 'a-rule' })], readSource);
+    const count = (text: string): number => text.split('1 error in 1 rule.').length - 1;
+    expect(count(formatTerminalReportBody(rules, undefined, 100))).toBe(1);
+    expect(count(formatTerminalReportBody(rules, undefined, 5))).toBe(2);
+    expect(count(formatTerminalReportBody(rules, undefined, undefined))).toBe(2);
+  });
+
+  it('hides the excluded line when nothing was excluded', () => {
+    const report = formatTerminalReport(
+      analyzeProblems([problem({ ruleId: 'no-var' })], readSource, true),
+    );
+    expect(report).not.toContain('excluded');
+  });
+
+  it('explains the hidden problems of the other rules in the focused report', () => {
+    const rules = analyzeProblems(
+      [
+        problem({ ruleId: 'a-rule' }),
+        problem({ ruleId: 'b-rule', severity: 1 }),
+        problem({ ruleId: 'b-rule', severity: 1, file: 'b.ts' }),
+      ],
+      readSource,
+    );
+    const focused = formatTerminalReportBody(rules, 'a-rule');
+    expect(focused).toContain('2 warnings in 1 other rule hidden; they follow after this rule.');
+    expect(focused).not.toContain('b-rule');
+    expect(formatTerminalReportBody(rules)).not.toContain('hidden');
+    expect(formatTerminalReportBody(rules, 'b-rule')).toContain(
+      '1 error in 1 other rule hidden; they follow after this rule.',
     );
   });
 
@@ -332,8 +360,7 @@ describe('runAnalyze', () => {
     output = '';
     prompts.confirms = [];
     prompts.messages = [];
-    prompts.actions = {};
-    prompts.rounds = [];
+    prompts.actions = [];
     prompts.choices = [];
     process.exitCode = undefined;
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
@@ -366,27 +393,47 @@ describe('runAnalyze', () => {
     expect(prompts.messages).toEqual([]);
   });
 
-  it('asks to exclude fixable problems and to write the markdown report', async () => {
-    prompts.confirms = [true, true];
+  it('asks to run lint:fix and to write the markdown report, leaving out fixable problems', async () => {
+    prompts.confirms = [false, true];
 
     await runAnalyze(dir, true);
 
     expect(prompts.messages).toEqual([
-      'Exclude auto-fixable errors/warnings? [Y]',
-      'What to do with the rules?',
+      'Run lint:fix? (1 problem can be fixed automatically) [Y]',
+      'Rule: no-console',
       `Write the report to ${ANALYSIS_REPORT_FILE}? [Y]`,
     ]);
-    expect(prompts.choices).toEqual([['no-console: 2 warnings in 2 files']]);
+    expect(prompts.choices).toEqual(['no-console: 2 warnings in 2 files']);
     expect(output).not.toContain('no-var');
-    expect(output).toContain('Auto-fixable problems excluded: 1.');
+    expect(output).toContain('1 Auto-fixable problem excluded.');
     expect(process.exitCode).toBeUndefined();
     expect(readFileSync(path.join(dir, ANALYSIS_REPORT_FILE), 'utf8')).toContain('`no-console`');
     expect(readFileSync(path.join(dir, 'eslint.config.mjs'), 'utf8')).not.toContain('disable');
   });
 
-  it('disables the chosen rules, lints again and skips the report when nothing remains', async () => {
+  it('runs lint:fix first when asked', async () => {
     prompts.confirms = [true];
-    prompts.actions = { 'no-console': 'disable' };
+
+    await runAnalyze(dir, true);
+
+    expect(readFileSync(path.join(dir, 'src/a.js'), 'utf8')).toBe('let a = 1;\nconsole.log(a);\n');
+    expect(prompts.messages[0]).toBe('Run lint:fix? (1 problem can be fixed automatically) [Y]');
+    expect(output).not.toContain('no-var');
+    expect(output).toContain('no-console — 2 warnings in 2 files');
+    expect(output.match(/ESLint analysis/gu)).toHaveLength(1);
+  });
+
+  it('does not ask to run lint:fix when nothing is fixable', async () => {
+    write('src/a.js', 'console.log(1);\n');
+
+    await runAnalyze(dir, true);
+
+    expect(prompts.messages.some((message) => message.includes('lint:fix'))).toBe(false);
+  });
+
+  it('disables the chosen rule, lints again and skips the report when nothing remains', async () => {
+    prompts.confirms = [false];
+    prompts.actions = ['disable'];
 
     await runAnalyze(dir, true);
 
@@ -394,34 +441,40 @@ describe('runAnalyze', () => {
       "  // disable-rules\n  {\n    rules: {\n      'no-console': 'off',\n    },\n  },\n];",
     );
     expect(prompts.messages).toEqual([
-      'Exclude auto-fixable errors/warnings? [Y]',
-      'What to do with the rules?',
+      'Run lint:fix? (1 problem can be fixed automatically) [Y]',
+      'Rule: no-console',
     ]);
     expect(output.match(/ESLint analysis/gu)).toHaveLength(2);
     expect(output).toMatch(
-      /ESLint analysis \(2\)\nNo problems found\.\nAuto-fixable problems excluded: 1\.\n/u,
+      /ESLint analysis \(2\)\nNo problems found\.\n1 Auto-fixable problem excluded\.\n/u,
     );
     expect(existsSync(path.join(dir, ANALYSIS_REPORT_FILE))).toBe(false);
   });
 
-  it('keeps the remaining problems after disabling rules', async () => {
+  it('shows the next rule after skipping and keeps the remaining problems', async () => {
+    write('src/c.js', 'debugger;\n');
+    write(
+      'eslint.config.mjs',
+      "export default [{ rules: { 'no-console': 'warn', 'no-debugger': 'error' } }];\n",
+    );
     prompts.confirms = [false];
-    prompts.actions = { 'no-console': 'disable' };
+    prompts.actions = ['disable', 'skip'];
 
     await runAnalyze(dir, true);
 
     expect(prompts.choices).toEqual([
-      ['no-console: 2 warnings in 2 files', 'no-var: 1 error (1 fixable) in 1 file'],
-      ['no-var: 1 error (1 fixable) in 1 file'],
+      'no-debugger: 1 error in 1 file',
+      'no-console: 2 warnings in 2 files',
     ]);
     expect(prompts.messages.at(-1)).toBe(`Write the report to ${ANALYSIS_REPORT_FILE}? [Y]`);
-    expect(output.split('ESLint analysis').at(-1)).not.toContain('no-console');
-    expect(process.exitCode).toBe(1);
+    expect(output.split('ESLint analysis').at(-1)).not.toContain('no-debugger');
+    expect(output.split('ESLint analysis').at(-1)).toContain('no-console');
+    expect(process.exitCode).toBeUndefined();
   });
 
   it('ignores the problems of a rule with comments and lints again', async () => {
     prompts.confirms = [false];
-    prompts.actions = { 'no-console': 'ignore', 'no-var': 'disable' };
+    prompts.actions = ['ignore'];
 
     await runAnalyze(dir, true);
 
@@ -431,32 +484,51 @@ describe('runAnalyze', () => {
     expect(readFileSync(path.join(dir, 'src/b.js'), 'utf8')).toBe(
       '/* eslint-disable no-console */\nconsole.log(2);\n/* eslint-enable no-console */\n',
     );
-    expect(readFileSync(path.join(dir, 'eslint.config.mjs'), 'utf8')).toContain("'no-var': 'off'");
     expect(output.split('ESLint analysis').at(-1)).toContain('No problems found.');
     expect(process.exitCode).toBeUndefined();
   });
 
-  it('asks again after each change until nothing changes', async () => {
+  it('prints only the report of the rule that is asked about, also after skipping', async () => {
+    write('src/c.js', 'debugger;\n');
+    write(
+      'eslint.config.mjs',
+      "export default [{ rules: { 'no-console': 'warn', 'no-debugger': 'error' } }];\n",
+    );
+    prompts.confirms = [false];
+    prompts.actions = ['skip', 'skip'];
+
+    await runAnalyze(dir, true);
+
+    const [, first, second] = output.split('ESLint analysis');
+    expect(output.match(/ESLint analysis/gu)).toHaveLength(2);
+    expect(first).toContain('no-debugger —');
+    expect(first).not.toContain('1. ');
+    expect(first).toContain('\nsrc/c.js:1:1  ');
+    expect(first).not.toContain('no-console —');
+    expect(second).toContain('no-console —');
+    expect(second).not.toContain('2. ');
+    expect(second).not.toContain('no-debugger —');
+  });
+
+  it('presents the rule with the most problems first, one per cycle, until finished', async () => {
     write('src/c.js', 'debugger;\n');
     write(
       'eslint.config.mjs',
       "export default [{ rules: { 'no-var': 'error', 'no-console': 'warn', 'no-debugger': 'error' } }];\n",
     );
     prompts.confirms = [false];
-    prompts.rounds = [{ 'no-console': 'disable' }, { 'no-debugger': 'ignore' }, {}];
+    prompts.actions = ['disable', 'finish'];
 
     await runAnalyze(dir, true);
 
-    expect(prompts.choices.map((round) => round.map((choice) => choice.split(':')[0]))).toEqual([
-      ['no-debugger', 'no-console', 'no-var'],
-      ['no-debugger', 'no-var'],
-      ['no-var'],
+    expect(prompts.choices.map((choice) => choice.split(':')[0])).toEqual([
+      'no-debugger',
+      'no-console',
     ]);
-    expect(output.match(/ESLint analysis/gu)).toHaveLength(3);
+    expect(output.match(/ESLint analysis/gu)).toHaveLength(2);
     expect(output).toContain('ESLint analysis (2)\n');
-    expect(output).toContain('ESLint analysis (3)\n');
     expect(prompts.messages.at(-1)).toBe(`Write the report to ${ANALYSIS_REPORT_FILE}? [Y]`);
-    expect(process.exitCode).toBe(1);
+    expect(process.exitCode).toBeUndefined();
   });
 
   it('fails for a missing directory', async () => {

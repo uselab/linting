@@ -46,7 +46,10 @@ describe('run init analyze offer', () => {
 
     expect(answers.analyzePrompts).toHaveLength(1);
     expect(mocks.runInstall).not.toHaveBeenCalled();
-    expect(mocks.runAnalyze).toHaveBeenCalledWith(dir, true, { intro: false });
+    expect(mocks.runAnalyze).toHaveBeenCalledWith(dir, true, {
+      intro: false,
+      commits: expect.anything(),
+    });
   });
 
   it('offers npm install first when init changed the dependencies', async () => {
@@ -58,7 +61,10 @@ describe('run init analyze offer', () => {
       'The analysis needs the dependencies installed. Run npm install first?',
     );
     expect(mocks.runInstall).toHaveBeenCalledWith(dir, 'npm install');
-    expect(mocks.runAnalyze).toHaveBeenCalledWith(dir, true, { intro: false });
+    expect(mocks.runAnalyze).toHaveBeenCalledWith(dir, true, {
+      intro: false,
+      commits: expect.anything(),
+    });
   });
 
   it('offers npm install first when a declared dependency is not installed', async () => {

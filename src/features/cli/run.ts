@@ -68,7 +68,9 @@ import { typecheckScript, updateViteChecker } from './typecheck';
 import { findViteConfig, viteConfigNeedsNodeTypes } from './vite';
 import { updateSourceTsconfigs, updateViteConfig } from './aliases';
 import { runAnalyze } from './analyze';
+import { runCheckRule } from './check-rule';
 import { offerAnalyze } from './analyze-offer';
+import { createCommitOffer } from './commit-offer';
 import { isInstalledOutdated } from './install';
 import { ownVersion } from './own-version';
 
@@ -85,6 +87,7 @@ be inside a git repository without uncommitted changes.
   analyze        Lints the project and lists the rules with errors/warnings by relevance, with
                  code examples; offers to disable rules or ignore them with comments, and to
                  write LINT-ANALYSIS.md
+  check          Lints the project and lists only the problems of one rule (exit 1 when any)
   copilot-hook   GitHub Copilot postToolUse hook: formats and lint-fixes the edited files
                  (JSON payload on stdin) and reports the remaining errors to the agent`;
 
@@ -423,6 +426,8 @@ const init = async (projectDir: string): Promise<void> => {
     detectPresets(projectDir, project?.data, tsconfig?.file),
     existing,
   );
+  const commits = createCommitOffer(projectDir, isInteractive(), { clean: true });
+  const finishChanges = commits.begin();
 
   const updatedProject = await updateModuleType(projectDir, project);
   const copilotHook = await confirm(
@@ -463,8 +468,9 @@ const init = async (projectDir: string): Promise<void> => {
     writeCopilotHook(tracked);
   }
   tracked.stage();
+  await finishChanges('Set up @uselab/linting');
   const install = installStep(dependencies, report.dependencies.length > 0);
-  if (await offerAnalyze(projectDir, requirements, install)) {
+  if (await offerAnalyze(projectDir, requirements, { install, commits })) {
     return;
   }
   printNextSteps(projectDir, install);
@@ -488,28 +494,28 @@ const runInit = async (dir: string | undefined): Promise<void> => {
   await init(projectDir);
 };
 
+const isHelp = (command: string | undefined): boolean =>
+  command === '--help' || command === '-h' || command === 'help';
+
+/** The commands that take a project directory, by name. */
+const COMMANDS: Record<string, (argv: string[]) => Promise<void>> = {
+  init: ([, dir]) => runInit(dir),
+  check: ([, rule, dir]) => runCheckRule(path.resolve(dir ?? process.cwd()), rule),
+  analyze: ([, dir]) => runAnalyze(path.resolve(dir ?? process.cwd()), isInteractive()),
+};
+
 /** Entry point of the CLI. */
 export const run = async (argv: string[]): Promise<void> => {
-  const [command, dir] = argv;
-  if (command === '--help' || command === '-h' || command === 'help') {
+  const [command] = argv;
+  if (isHelp(command)) {
     process.stdout.write(`${USAGE}\n`);
-    return;
-  }
-  if (command === 'copilot-hook') {
+  } else if (command === 'copilot-hook') {
     await runCopilotHook();
-    return;
-  }
-  if (command === undefined && isInteractive()) {
+  } else if (command === undefined && isInteractive()) {
     await runInit(undefined);
-    return;
+  } else if (command !== undefined && Object.hasOwn(COMMANDS, command)) {
+    await COMMANDS[command]?.(argv);
+  } else {
+    fail(USAGE);
   }
-  if (command === 'init') {
-    await runInit(dir);
-    return;
-  }
-  if (command === 'analyze') {
-    await runAnalyze(path.resolve(dir ?? process.cwd()), isInteractive());
-    return;
-  }
-  fail(USAGE);
 };

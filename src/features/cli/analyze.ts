@@ -4,9 +4,10 @@ import { styleText } from 'node:util';
 import * as clack from '@clack/prompts';
 import type { ESLint, Linter } from 'eslint';
 import { DDD_REFERENCE, dddSectionLines, isBoundaryRule } from './ddd-section';
+import { createCommitOffer, type CommitOffer } from './commit-offer';
 import { ownVersion } from './own-version';
 import { confirm } from './prompts';
-import { applyRuleActions } from './rule-actions';
+import { applyRuleAction } from './rule-actions';
 import type { RuleChoice } from './rule-actions-prompt';
 
 export const ANALYSIS_REPORT_FILE = 'LINT-ANALYSIS.md';
@@ -233,15 +234,25 @@ const totals = (rules: RuleSummary[]) => ({
   fixableWarnings: rules.reduce((sum, rule) => sum + rule.fixableWarnings, 0),
 });
 
-const summaryLines = ({ rules, excludedFixable }: Analysis): string[] => {
+const summaryLines = ({ rules, excludedFixable = 0 }: Analysis): string[] => {
   const lines =
     rules.length === 0
       ? ['No problems found.']
       : [`${describeCounts(totals(rules))} in ${plural(rules.length, 'rule')}.`];
-  if (excludedFixable !== undefined) {
-    lines.push(`Auto-fixable problems excluded: ${excludedFixable}.`);
+  if (excludedFixable > 0) {
+    lines.push(`${plural(excludedFixable, 'Auto-fixable problem')} excluded.`);
   }
   return lines;
+};
+
+/** Explains which problems of the other rules are hidden in the focused report. */
+const hiddenLines = ({ rules }: Analysis, focus: string | undefined): string[] => {
+  const others = rules.filter(({ ruleId }) => ruleId !== focus);
+  return focus === undefined || others.length === 0
+    ? []
+    : [
+        `${describeCounts(totals(others))} in ${plural(others.length, 'other rule')} hidden; they follow after this rule.`,
+      ];
 };
 
 const fixHint = (analysis: Analysis): string | undefined => {
@@ -253,7 +264,7 @@ const fixHint = (analysis: Analysis): string | undefined => {
 };
 
 const ruleHeading = (rule: RuleSummary): string =>
-  `${styleText('red', rule.ruleId)} — ${describeCounts(rule)} in ${plural(rule.files.length, 'file')}`;
+  `${styleText(rule.errors > 0 ? 'red' : 'yellow', rule.ruleId)} — ${describeCounts(rule)} in ${plural(rule.files.length, 'file')}`;
 
 /** The file, with the position of the problem when it has only one. */
 const fileLocation = ({ file, count: problems, line, column }: FileCount): string =>
@@ -274,20 +285,39 @@ const numberedLines = ({ lines }: Example): string[] => {
 
 export const TERMINAL_REPORT_TITLE = 'ESLint analysis';
 
-/** The analysis as plain text for the terminal, without the title. */
-export const formatTerminalReportBody = (analysis: Analysis): string => {
-  const lines = summaryLines(analysis);
-  for (const [index, rule] of analysis.rules.entries()) {
-    lines.push('', `${index + 1}. ${ruleHeading(rule)}`);
-    lines.push(...fileList(rule).map((file) => `   - ${file}`));
+/** Whether the top of the report would scroll out of view. */
+const repeatsSummary = (reportLines: number, rows: number | undefined): boolean =>
+  rows === undefined || reportLines > rows;
+
+/**
+ * The analysis as plain text for the terminal, without the title. With `focus`, only that rule is
+ * listed, without a number or indentation. The summary is repeated at the bottom when the report
+ * is taller than the terminal (`rows`), or when the height is unknown.
+ */
+export const formatTerminalReportBody = (
+  analysis: Analysis,
+  focus?: string,
+  rows: number | undefined = process.stdout.rows,
+): string => {
+  const lines = [...summaryLines(analysis), ...hiddenLines(analysis, focus)];
+  const focused = focus !== undefined;
+  const indent = focused ? '' : '   ';
+  const shown = [...analysis.rules.entries()].filter(
+    ([, { ruleId }]) => !focused || ruleId === focus,
+  );
+  for (const [index, rule] of shown) {
+    lines.push('', focused ? ruleHeading(rule) : `${index + 1}. ${ruleHeading(rule)}`);
+    lines.push(...fileList(rule).map((file) => `${indent}- ${file}`));
     for (const example of rule.examples) {
-      lines.push('', `   ${location(example)}  ${example.problem.message}`);
-      lines.push(...numberedLines(example).map((line) => styleText('dim', `   ${line}`)));
+      lines.push('', `${indent}${location(example)}  ${example.problem.message}`);
+      lines.push(...numberedLines(example).map((line) => styleText('dim', `${indent}${line}`)));
     }
   }
   const hint = fixHint(analysis);
   const footer = [
-    ...(analysis.rules.length > 0 ? summaryLines(analysis) : []),
+    ...(analysis.rules.length > 0 && repeatsSummary(lines.length, rows)
+      ? [...summaryLines(analysis), ...hiddenLines(analysis, focus)]
+      : []),
     ...(hint ? [hint] : []),
   ];
   return [...lines, ...(footer.length > 0 ? ['', ...footer] : [])].join('\n');
@@ -298,16 +328,23 @@ export const formatTerminalReport = (analysis: Analysis): string =>
   `${TERMINAL_REPORT_TITLE}\n${formatTerminalReportBody(analysis)}`;
 
 /**
- * Prints the report: interactively in a bordered box (numbered after the first run), so each
- * report stands out as one block when scrolling back; otherwise as plain text.
+ * Prints the report: interactively in a bordered box (numbered after the first report), so each
+ * report stands out as one block when scrolling back, showing only the `focus` rule; otherwise as
+ * plain text with all rules.
  */
-const printReport = (analysis: Analysis, interactive: boolean, run: number): void => {
+const printReport = (
+  analysis: Analysis,
+  { interactive, run, focus }: { interactive: boolean; run: number; focus?: string },
+): void => {
   if (!interactive) {
     process.stdout.write(`\n${formatTerminalReport(analysis)}\n\n`);
     return;
   }
   const title = run > 1 ? `${TERMINAL_REPORT_TITLE} (${run})` : TERMINAL_REPORT_TITLE;
-  clack.box(formatTerminalReportBody(analysis), title, { width: 'auto', contentPadding: 2 });
+  clack.box(formatTerminalReportBody(analysis, focus), title, {
+    width: 'auto',
+    contentPadding: 2,
+  });
 };
 
 const fenceLanguage = (file: string): string => path.extname(file).slice(1);
@@ -358,25 +395,33 @@ export const fileSourceReader = (projectDir: string): SourceReader => {
 };
 
 /** Lints the whole project like the `lint` script (`eslint .` with its cache). */
-export const lintProject = async (projectDir: string): Promise<ESLint.LintResult[]> => {
+export const lintProject = async (
+  projectDir: string,
+  fix = false,
+): Promise<ESLint.LintResult[]> => {
   const { ESLint: Linter } = await import('eslint');
   const eslint = new Linter({
     cwd: projectDir,
     cache: true,
     cacheLocation: ESLINT_CACHE,
     warnIgnored: false,
+    fix,
   });
-  return eslint.lintFiles(['.']);
+  const results = await eslint.lintFiles(['.']);
+  if (fix) {
+    await Linter.outputFixes(results);
+  }
+  return results;
 };
 
-const lintWithSpinner = async (projectDir: string, interactive: boolean) => {
+const lintWithSpinner = async (projectDir: string, interactive: boolean, fix: boolean) => {
   if (!interactive) {
     return lintProject(projectDir);
   }
   const spinner = clack.spinner();
-  spinner.start('Running ESLint');
+  spinner.start(fix ? 'Running ESLint with --fix' : 'Running ESLint');
   try {
-    const results = await lintProject(projectDir);
+    const results = await lintProject(projectDir, fix);
     spinner.stop('ESLint finished');
     return results;
   } catch (error) {
@@ -385,25 +430,31 @@ const lintWithSpinner = async (projectDir: string, interactive: boolean) => {
   }
 };
 
-const offerMarkdownReport = async (projectDir: string, analysis: Analysis): Promise<void> => {
+const offerMarkdownReport = async (
+  projectDir: string,
+  analysis: Analysis,
+  commits: CommitOffer,
+): Promise<void> => {
   if (analysis.rules.length === 0) {
     return;
   }
   if (await confirm(`Write the report to ${ANALYSIS_REPORT_FILE}?`)) {
-    writeFileSync(path.join(projectDir, ANALYSIS_REPORT_FILE), formatMarkdownReport(analysis));
-    clack.log.success(`Wrote ${ANALYSIS_REPORT_FILE}.`);
+    await commits.step(`Added ${ANALYSIS_REPORT_FILE}`, () => {
+      writeFileSync(path.join(projectDir, ANALYSIS_REPORT_FILE), formatMarkdownReport(analysis));
+      clack.log.success(`Wrote ${ANALYSIS_REPORT_FILE}.`);
+    });
   }
 };
 
-const ruleChoices = ({ rules }: Analysis): RuleChoice[] =>
-  rules
-    .map((rule, index) => ({ rule, number: index + 1 }))
-    .filter(({ rule }) => rule.ruleId !== PARSE_ERROR_RULE)
-    .map(({ rule, number }) => ({
-      number,
-      ruleId: rule.ruleId,
-      hint: `${describeCounts(rule)} in ${plural(rule.files.length, 'file')}`,
-    }));
+const ruleChoice = ({ rules }: Analysis, skipped: ReadonlySet<string>): RuleChoice | undefined => {
+  const rule = rules.find(({ ruleId }) => ruleId !== PARSE_ERROR_RULE && !skipped.has(ruleId));
+  return rule
+    ? {
+        ruleId: rule.ruleId,
+        hint: `${describeCounts(rule)} in ${plural(rule.files.length, 'file')}`,
+      }
+    : undefined;
+};
 
 const isMissingDirectory = (projectDir: string): boolean => {
   if (existsSync(projectDir) && statSync(projectDir).isDirectory()) {
@@ -414,16 +465,62 @@ const isMissingDirectory = (projectDir: string): boolean => {
   return true;
 };
 
+type AnalyzeRun = { analysis: Analysis; reported: Problem[] };
+
+type Print = (analysis: Analysis, focus?: string) => void;
+
+/**
+ * Offers the top rule one at a time, printing only that rule's report first and linting again
+ * after each change, until finished. Without a rule to offer after a change, prints the full report.
+ */
+const handleRules = async (
+  projectDir: string,
+  first: AnalyzeRun,
+  {
+    analyze,
+    print,
+    commits,
+  }: { analyze: () => Promise<AnalyzeRun>; print: Print; commits: CommitOffer },
+): Promise<AnalyzeRun> => {
+  const skipped = new Set<string>();
+  let current = first;
+  let choice = ruleChoice(current.analysis, skipped);
+  if (!choice) {
+    print(current.analysis);
+  }
+  while (choice) {
+    print(current.analysis, choice.ruleId);
+    const outcome = await applyRuleAction(projectDir, choice, {
+      problems: current.reported,
+      commits,
+    });
+    if (outcome === 'finished') {
+      break;
+    }
+    if (outcome === 'skipped') {
+      skipped.add(choice.ruleId);
+    } else {
+      current = await analyze();
+    }
+    choice = ruleChoice(current.analysis, skipped);
+    if (!choice && outcome === 'changed') {
+      print(current.analysis);
+    }
+  }
+  return current;
+};
+
 /**
  * The `analyze` command: lints the project and prints the rules with problems, ordered by
- * relevance, with code excerpts. Interactively, it offers to disable rules or ignore their problems
- * with comments (linting again) and to write the report to markdown. Exits with 1 when the (final)
+ * relevance, with code excerpts. Interactively, it offers the top rule at a time to disable or
+ * ignore its problems with comments (linting again), or to edit the ignores, then offers to write
+ * the report to markdown. Exits with 1 when the (final)
  * report contains errors. `intro: false` skips the intro, when run at the end of init.
  */
 export const runAnalyze = async (
   projectDir: string,
   interactive: boolean,
-  { intro = true }: { intro?: boolean } = {},
+  { intro = true, commits }: { intro?: boolean; commits?: CommitOffer } = {},
 ): Promise<void> => {
   if (isMissingDirectory(projectDir)) {
     return;
@@ -431,26 +528,43 @@ export const runAnalyze = async (
   if (interactive && intro) {
     clack.intro(`@uselab/linting@${ownVersion()} analyze`);
   }
-  const excludeFixable = interactive && (await confirm('Exclude auto-fixable errors/warnings?'));
+  const commitOffer = commits ?? createCommitOffer(projectDir, interactive);
+  // Auto-fixable problems are left out interactively; `lint:fix` handles them.
+  const excludeFixable = interactive;
   let run = 0;
+  const lintAndCollect = async (fix: boolean) =>
+    collectProblems(projectDir, await lintWithSpinner(projectDir, interactive, fix));
+  const lintProblems = async (fix: boolean) =>
+    fix ? commitOffer.step('Ran lint:fix', () => lintAndCollect(true)) : lintAndCollect(false);
+  const offerFix = async (problems: Problem[]): Promise<boolean> => {
+    const fixable = problems.filter((problem) => problem.fixable).length;
+    return (
+      interactive &&
+      run === 0 &&
+      fixable > 0 &&
+      (await confirm(`Run lint:fix? (${plural(fixable, 'problem')} can be fixed automatically)`))
+    );
+  };
   const analyze = async () => {
-    const results = await lintWithSpinner(projectDir, interactive);
-    const problems = collectProblems(projectDir, results);
+    const linted = await lintProblems(false);
+    const problems = (await offerFix(linted)) ? await lintProblems(true) : linted;
     const analysis = analyzeProblems(problems, fileSourceReader(projectDir), excludeFixable);
-    run += 1;
-    printReport(analysis, interactive, run);
     const reported = excludeFixable ? problems.filter(({ fixable }) => !fixable) : problems;
     return { analysis, reported };
   };
-  let { analysis, reported } = await analyze();
+  const print: Print = (analysis, focus) => {
+    run += 1;
+    printReport(analysis, { interactive, run, focus });
+  };
+  let current = await analyze();
   if (interactive) {
-    while (await applyRuleActions(projectDir, ruleChoices(analysis), reported)) {
-      ({ analysis, reported } = await analyze());
-    }
-    await offerMarkdownReport(projectDir, analysis);
+    current = await handleRules(projectDir, current, { analyze, print, commits: commitOffer });
+    await offerMarkdownReport(projectDir, current.analysis, commitOffer);
     clack.outro('Done.');
+  } else {
+    print(current.analysis);
   }
-  if (totals(analysis.rules).errors > 0) {
+  if (totals(current.analysis.rules).errors > 0) {
     process.exitCode = 1;
   }
 };
