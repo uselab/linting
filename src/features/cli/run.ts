@@ -69,6 +69,7 @@ import { findViteConfig, viteConfigNeedsNodeTypes } from './vite';
 import { updateSourceTsconfigs, updateViteConfig } from './aliases';
 import { runAnalyze } from './analyze';
 import { offerAnalyze } from './analyze-offer';
+import { createCommitOffer } from './commit-offer';
 import { isInstalledOutdated } from './install';
 import { ownVersion } from './own-version';
 
@@ -423,6 +424,8 @@ const init = async (projectDir: string): Promise<void> => {
     detectPresets(projectDir, project?.data, tsconfig?.file),
     existing,
   );
+  const commits = createCommitOffer(projectDir, isInteractive(), { clean: true });
+  const finishChanges = commits.begin();
 
   const updatedProject = await updateModuleType(projectDir, project);
   const copilotHook = await confirm(
@@ -463,8 +466,9 @@ const init = async (projectDir: string): Promise<void> => {
     writeCopilotHook(tracked);
   }
   tracked.stage();
+  await finishChanges('Set up @uselab/linting');
   const install = installStep(dependencies, report.dependencies.length > 0);
-  if (await offerAnalyze(projectDir, requirements, install)) {
+  if (await offerAnalyze(projectDir, requirements, { install, commits })) {
     return;
   }
   printNextSteps(projectDir, install);

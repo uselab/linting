@@ -12,9 +12,9 @@ const prompts = vi.hoisted(
       validate: (value: string | undefined) => string | undefined;
     }[];
     messages: string[];
-    editIgnores: boolean | boolean[];
+    actions: string[];
     ruleActionsAsked: number;
-  } => ({ texts: [], asked: [], messages: [], editIgnores: false, ruleActionsAsked: 0 }),
+  } => ({ texts: [], asked: [], messages: [], actions: [], ruleActionsAsked: 0 }),
 );
 
 vi.mock('@clack/prompts', () => {
@@ -36,18 +36,13 @@ vi.mock('@clack/prompts', () => {
 });
 
 vi.mock('../../src/features/cli/rule-actions-prompt', () => ({
-  askRuleActions: async (choices: { ruleId: string }[]) => {
+  askRuleAction: async () => {
     prompts.ruleActionsAsked += 1;
-    return {
-      actions: new Map(choices.map(({ ruleId }) => [ruleId, 'keep'])),
-      editIgnores: Array.isArray(prompts.editIgnores)
-        ? (prompts.editIgnores.shift() ?? false)
-        : prompts.editIgnores,
-    };
+    return prompts.actions.shift() ?? 'skip';
   },
 }));
 
-const { applyRuleActions, editGlobalIgnores } = await import('../../src/features/cli/rule-actions');
+const { applyRuleAction, editGlobalIgnores } = await import('../../src/features/cli/rule-actions');
 
 const DEFAULTS = "'**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo'";
 
@@ -77,7 +72,7 @@ describe('editGlobalIgnores', () => {
     prompts.texts = [];
     prompts.asked = [];
     prompts.messages = [];
-    prompts.editIgnores = false;
+    prompts.actions = [];
     prompts.ruleActionsAsked = 0;
   });
 
@@ -179,24 +174,47 @@ describe('editGlobalIgnores', () => {
     );
   });
 
-  it('is asked for from the rule actions and counts as a change', async () => {
+  it('is asked for from the rule action and counts as a change', async () => {
     writeFileSync(configPath(), uselabConfig(DEFAULTS));
-    prompts.editIgnores = true;
+    prompts.actions = ['editIgnores'];
     prompts.texts = ['legacy/**'];
 
-    expect(await applyRuleActions(dir, [{ ruleId: 'no-var', hint: '' }], [])).toBe(true);
+    expect(await applyRuleAction(dir, { ruleId: 'no-var', hint: '' }, { problems: [] })).toBe(
+      'changed',
+    );
 
     expect(config()).toContain("'legacy/**'");
   });
 
-  it('asks for the rule actions again when the ignores are unchanged', async () => {
+  it('asks again when the ignores are unchanged', async () => {
     const text = uselabConfig(DEFAULTS);
     writeFileSync(configPath(), text);
-    prompts.editIgnores = [true, false];
+    prompts.actions = ['editIgnores', 'skip'];
 
-    expect(await applyRuleActions(dir, [{ ruleId: 'no-var', hint: '' }], [])).toBe(false);
+    expect(await applyRuleAction(dir, { ruleId: 'no-var', hint: '' }, { problems: [] })).toBe(
+      'skipped',
+    );
 
     expect(prompts.ruleActionsAsked).toBe(2);
     expect(config()).toBe(text);
+  });
+
+  it('disables the rule', async () => {
+    writeFileSync(configPath(), uselabConfig(DEFAULTS));
+    prompts.actions = ['disable'];
+
+    expect(await applyRuleAction(dir, { ruleId: 'no-var', hint: '' }, { problems: [] })).toBe(
+      'changed',
+    );
+
+    expect(config()).toContain("'no-var': 'off'");
+  });
+
+  it('finishes', async () => {
+    prompts.actions = ['finish'];
+
+    expect(await applyRuleAction(dir, { ruleId: 'no-var', hint: '' }, { problems: [] })).toBe(
+      'finished',
+    );
   });
 });

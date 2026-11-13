@@ -25,7 +25,7 @@ Run it in a git repository without uncommitted changes, so you can review and re
 - updates `devDependencies` and adds the `lint`, `lint:fix`, `lint:analyze` scripts (plus `format`, `format:check` with `prettier` and `typecheck` with `typescript`);
 - adds the [Copilot hook](#github-copilot-hook);
 - with `typescript` in a Vite project, adds `vite-plugin-checker`; with `aliases`, adds the [path aliases](#path-aliases) to the tsconfig and `vite.config.*`; sets `noImplicitAny`;
-- stages the files it creates or renames with git, and offers to run `npm install` and the [analysis](#analyze).
+- stages the files it creates or renames with git, offers to [commit](#commit-prompts) the setup, and offers to run `npm install` and the [analysis](#analyze).
 
 ### GitHub Copilot hook
 
@@ -37,15 +37,20 @@ Run it in a git repository without uncommitted changes, so you can review and re
 npx uselab-linting analyze [dir]
 ```
 
-Lints the project like the `lint` script and lists the rules that report problems, most relevant first (errors without autofix, then warnings, then auto-fixable ones), with counts, files and code excerpts.
+Lints the project like the `lint` script and lists the rules that report problems, most relevant first (errors without autofix, then warnings), with counts, files and code excerpts. In an interactive terminal it first offers to run `lint:fix`, and auto-fixable problems are left out of the analysis.
 
-In an interactive terminal you choose an action per rule:
+In an interactive terminal you get one rule per cycle: the most relevant one (the top of the list). Choose what to do with it:
 
-- **keep**: leave the rule as is;
+- **skip**: leave the rule as is (you fix it yourself) and show the next one;
+- **ignore with comments**: add `eslint-disable-next-line` comments above the existing problems; the rule stays active for new code;
 - **disable**: turn the rule off in a `// disable-rules` entry of the ESLint config;
-- **ignore with comments**: add `eslint-disable-next-line` comments above the existing problems; the rule stays active for new code.
+- **edit ESLint ignore configuration**: change the `globalIgnores()` scope.
 
-An **Edit ESLint ignore configuration** row lets you change the `globalIgnores()` scope. ESLint then re-runs until you confirm with every rule on keep (esc continues without changes). Remaining problems can be written to `LINT-ANALYSIS.md`. Exits with 1 when the final report contains errors.
+Esc stops and continues to the report. The report shows only the rule being asked about. After a change ESLint re-runs and the next top rule is offered. Remaining problems can be written to `LINT-ANALYSIS.md`. Exits with 1 when the final report contains errors.
+
+### Commit prompts
+
+In an interactive terminal inside a git repository, `init` and `analyze` only change a clean working tree. Before the first change, existing uncommitted changes must be committed (a multiline commit message is required); answering No stops the CLI. After each step that changed files (the setup, `lint:fix`, disabling a rule, adding `eslint-disable` comments, editing the ignores, writing the report), git is checked and you are asked "Do you want me to commit the changes I made?"; on Yes you edit a multiline message (press Enter twice to submit) such as `Added eslint-disable comments for no-explicit-any`. When you answer No, the default message is added on a new line to the default of the next prompt; with several lines each one is prefixed with a dash. A later step that changes an already modified file is detected as a change too.
 
 ## Usage
 

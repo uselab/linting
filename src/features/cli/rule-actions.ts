@@ -2,14 +2,12 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import * as clack from '@clack/prompts';
 import type { Problem } from './analyze';
+import { disabledCommitOffer, type CommitOffer } from './commit-offer';
 import { findEslintConfigFile, writeDisabledRules } from './disable-rules';
 import { readEslintConfig, updateEslintIgnores } from './eslint-config';
 import { ignoreProblems } from './ignore-comments';
 import { askScopeGlobs } from './prompts';
-import { askRuleActions, type RuleChoice } from './rule-actions-prompt';
-
-const rulesWith = (actions: Map<string, string>, wanted: string): string[] =>
-  [...actions].flatMap(([ruleId, action]) => (action === wanted ? [ruleId] : []));
+import { askRuleAction, type RuleChoice } from './rule-actions-prompt';
 
 const ignoreRules = (projectDir: string, ruleIds: string[], problems: Problem[]): boolean => {
   const { files, comments, skipped } = ignoreProblems(
@@ -71,39 +69,41 @@ export const editGlobalIgnores = async (projectDir: string): Promise<boolean> =>
   return true;
 };
 
-/** Asks for the rule actions once and applies them. */
-const applyRuleActionsOnce = async (
-  projectDir: string,
-  choices: RuleChoice[],
-  problems: Problem[],
-): Promise<{ changed: boolean; editIgnores: boolean }> => {
-  const { actions, editIgnores } = await askRuleActions(choices);
-  const disable = rulesWith(actions, 'disable');
-  const ignore = rulesWith(actions, 'ignore');
-  const disabled = disable.length > 0 && (await writeDisabledRules(projectDir, disable));
-  const ignored = ignore.length > 0 && ignoreRules(projectDir, ignore, problems);
-  const ignoresEdited = editIgnores && (await editGlobalIgnores(projectDir));
-  return { changed: disabled || ignored || ignoresEdited, editIgnores };
-};
+/** The outcome of handling one rule: the project changed, the rule was skipped, or stop. */
+export type RuleOutcome = 'changed' | 'skipped' | 'finished';
 
 /**
- * Asks per rule whether to keep it, disable it in the ESLint config, or ignore its problems with
- * `eslint-disable-next-line` comments, and applies the choices. Then edits the ignores when
- * asked for; when that changes nothing, it asks for the rule actions again. Returns whether
- * anything changed.
+ * Asks what to do with a single rule: disable it in the ESLint config, ignore its problems with
+ * `eslint-disable-next-line` comments, edit the ignores, skip it or finish. When editing the
+ * ignores changes nothing, it asks again.
  */
-export const applyRuleActions = async (
+export const applyRuleAction = async (
   projectDir: string,
-  choices: RuleChoice[],
-  problems: Problem[],
-): Promise<boolean> => {
-  if (choices.length === 0) {
-    return false;
-  }
+  choice: RuleChoice,
+  { problems, commits = disabledCommitOffer }: { problems: Problem[]; commits?: CommitOffer },
+): Promise<RuleOutcome> => {
   for (;;) {
-    const { changed, editIgnores } = await applyRuleActionsOnce(projectDir, choices, problems);
-    if (changed || !editIgnores) {
-      return changed;
+    const action = await askRuleAction(choice);
+    if (action === 'skip' || action === 'finish') {
+      return action === 'skip' ? 'skipped' : 'finished';
+    }
+    const changed =
+      action === 'disable'
+        ? await commits.step(`Disabled ${choice.ruleId} in the ESLint config`, () =>
+            writeDisabledRules(projectDir, [choice.ruleId]),
+          )
+        : action === 'ignore'
+          ? await commits.step(`Added eslint-disable comments for ${choice.ruleId}`, () =>
+              ignoreRules(projectDir, [choice.ruleId], problems),
+            )
+          : await commits.step('Updated the lint scope in the ESLint config', () =>
+              editGlobalIgnores(projectDir),
+            );
+    if (changed) {
+      return 'changed';
+    }
+    if (action !== 'editIgnores') {
+      return 'skipped';
     }
   }
 };

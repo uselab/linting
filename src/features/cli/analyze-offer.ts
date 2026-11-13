@@ -1,5 +1,6 @@
 import * as clack from '@clack/prompts';
 import { runAnalyze } from './analyze';
+import type { CommitOffer } from './commit-offer';
 import type { Requirement } from './dependencies';
 import { missingInstalls, runInstall } from './install';
 import { confirm } from './prompts';
@@ -12,7 +13,7 @@ import { confirm } from './prompts';
 export const offerAnalyze = async (
   projectDir: string,
   requirements: Requirement[],
-  install: string | undefined,
+  { install, commits }: { install: string | undefined; commits?: CommitOffer },
 ): Promise<boolean> => {
   if (!(await confirm('Run the lint analysis (uselab-linting analyze) now?'))) {
     return false;
@@ -30,6 +31,6 @@ export const offerAnalyze = async (
     }
     clack.log.success(`Ran ${command}.`);
   }
-  await runAnalyze(projectDir, true, { intro: false });
+  await runAnalyze(projectDir, true, { intro: false, commits });
   return true;
 };
