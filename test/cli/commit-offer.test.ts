@@ -56,6 +56,14 @@ const subjects = (): string[] =>
     .filter(Boolean);
 
 beforeEach(() => {
+  // The code under test runs a plain `git commit`, which fails on CI where no identity is configured.
+  vi.stubEnv('GIT_AUTHOR_NAME', 'test');
+  vi.stubEnv('GIT_AUTHOR_EMAIL', 't@example.com');
+  vi.stubEnv('GIT_COMMITTER_NAME', 'test');
+  vi.stubEnv('GIT_COMMITTER_EMAIL', 't@example.com');
+  vi.stubEnv('GIT_CONFIG_COUNT', '1');
+  vi.stubEnv('GIT_CONFIG_KEY_0', 'commit.gpgsign');
+  vi.stubEnv('GIT_CONFIG_VALUE_0', 'false');
   dir = mkdtempSync(path.join(tmpdir(), 'uselab-commit-'));
   git('init', '--quiet');
   write('a.txt', 'a');
@@ -65,6 +73,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   rmSync(dir, { recursive: true, force: true });
 });
 
