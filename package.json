@@ -1,6 +1,6 @@
 {
   "name": "@uselab/linting",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Uselab linting rules. Also provides a CLI to check and fix them, and a Copilot prompt to fix one rule at a time.",
   "type": "module",
   "license": "MIT",
