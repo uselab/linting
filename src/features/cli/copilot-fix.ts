@@ -10,8 +10,8 @@ const SAFE_RULE_ID = /^[\w@/.-]+$/u;
 const SAFE_PATH = /^[\w@/.+-]+$/u;
 const MESSAGE_DIR = 'node_modules/.cache/uselab-linting';
 const MAX_ALLOW_LENGTH = 6000;
-/** Pre-approves the check command (any rule) so Copilot can verify its work without asking. */
-const ALLOW_CHECK = 'shell(npx uselab-linting check:*)';
+/** Pre-approves the check command (any rule) so Copilot can verify its work without asking. Copilot names the command `npx uselab-linting`, so a longer prefix never matches. */
+const ALLOW_CHECK = 'shell(npx uselab-linting:*)';
 
 export const COPILOT_MISSING_MESSAGE =
   'GitHub Copilot CLI (`copilot`) was not found. Install it (https://docs.github.com/en/copilot/how-tos/copilot-cli) and sign in, then try again.';

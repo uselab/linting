@@ -1,8 +1,8 @@
 {
-  "description": "Prompt for Copilot CLI to fix the problems of one ESLint rule. Lines are joined with a space. {ruleId} is replaced by the rule and {messageFile} by the file for the commit message. Keep it free of quotes and shell characters: it is passed through a shell.",
+  "description": "Prompt for Copilot CLI to fix the problems of one ESLint rule. Lines are joined with a space. {ruleId} is replaced by the rule and {messageFile} by the file for the commit message. Keep it free of double quotes and shell characters (single quotes are fine): it is passed through a shell inside double quotes.",
   "lines": [
     "Fix only the ESLint problems of the rule {ruleId} in this project.",
-    "Check them with: npx uselab-linting check {ruleId}. This is the check command.",
+    "Check them with: npx uselab-linting check '{ruleId}'. This is the check command. Keep the single quotes around the rule name, because PowerShell cannot parse an unquoted name that starts with @.",
     "Do not change code for other rules.",
     "Fix the root cause. Do not take shortcuts: do not disable the rule, do not add eslint-disable comments, do not change the ESLint config or ignores, do not use ts-ignore, any or type assertions to silence it.",
     "Run the check command again after your changes until it reports no problems.",

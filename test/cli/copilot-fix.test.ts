@@ -27,7 +27,7 @@ describe('copilotFixPrompt', () => {
       'only the ESLint problems of the rule @typescript-eslint/no-explicit-any',
     );
     expect(prompt).toContain('do not disable the rule');
-    expect(prompt).toContain('check @typescript-eslint/no-explicit-any');
+    expect(prompt).toContain("check '@typescript-eslint/no-explicit-any'");
   });
 
   it('allows commenting out only with permission', () => {
@@ -41,8 +41,8 @@ describe('copilotFixPrompt', () => {
     expect(prompt).not.toContain('{');
   });
 
-  it('is one line without quotes', () => {
-    expect(prompt).not.toMatch(/["'`\n]/u);
+  it('is one line without double quotes', () => {
+    expect(prompt).not.toMatch(/["`\n]/u);
   });
 });
 
@@ -103,7 +103,7 @@ describe('runCopilotFix', () => {
     expect(args[0]).toBe('-i');
     expect(args[1]).toContain('no-console');
     expect(args[2]).toMatch(
-      /^--allow-tool="write\(node_modules\/.+\.txt\),write\(src\/a\.ts\),shell\(npx uselab-linting check:\*\)"$/u,
+      /^--allow-tool="write\(node_modules\/.+\.txt\),write\(src\/a\.ts\),shell\(npx uselab-linting:\*\)"$/u,
     );
     expect(options).toMatchObject({ cwd: dir, stdio: 'inherit' });
   });
