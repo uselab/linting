@@ -39,6 +39,15 @@ const initialEnvironment = ({
   return { initialProjectType: environment?.type ?? detection.projectType, initialBrowserFiles };
 };
 
+/** The options of an existing config, used as initial answers. */
+const existingOptions = (existing: ExistingConfig | undefined) => ({
+  initialJavascript: existing?.javascript,
+  initialBoundaries: existing?.boundaries,
+  initialQuery: existing?.query,
+  initialIgnores: existing?.ignores,
+  ignoresEditable: existing?.ignoresEditable ?? true,
+});
+
 /** Asks for the presets, preselecting the detected ones and those of an existing config. */
 export const askPresets = async (
   projectDir: string,
@@ -56,11 +65,7 @@ export const askPresets = async (
       tsconfigsFor: (srcDirs) => findSourceTsconfigs(projectDir, srcDirs).map(({ file }) => file),
     },
     detectedTestFiles,
-    initialJavascript: existing?.config.javascript,
-    initialBoundaries: existing?.config.boundaries,
-    initialQuery: existing?.config.query,
+    ...existingOptions(existing?.config),
     detectedQueryLibrary: detection.queryLibrary,
-    initialIgnores: existing?.config.ignores,
-    ignoresEditable: existing?.config.ignoresEditable ?? true,
   });
 };

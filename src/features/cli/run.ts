@@ -75,7 +75,7 @@ import { isInstalledOutdated } from './install';
 import { ownVersion } from './own-version';
 
 export const USAGE = `Usage: uselab-linting init [dir]
-       uselab-linting analyze [dir] [--quiet]
+       uselab-linting analyze [dir]
        uselab-linting        check <rule> [dir] [--with-warnings] [--max-errors <n>]
        uselab-linting copilot-hook
 
@@ -87,7 +87,7 @@ be inside a git repository without uncommitted changes.
   dir            Target project directory (default: current directory)
   analyze        Lints the project and lists the rules with errors/warnings by relevance, with
                  code examples; offers to disable rules or ignore them with comments, and to
-                 write LINT-ANALYSIS.md; --quiet leaves out the warnings
+                 write LINT-ANALYSIS.md
   check          Lints the project and lists only the errors of one rule (exit 1 when any);
                  --with-warnings includes the warnings; --max-errors <n> limits the number
                  of listed problems (default 50)
@@ -181,6 +181,7 @@ const describeChanges = (update: ConfigUpdate): string[] => [
   ...(update.queryUpdated ? ['~ query()'] : []),
   ...update.globalsUpdated.map((preset) => `~ ${preset}()`),
   ...(update.ignoresUpdated ? ['~ globalIgnores()'] : []),
+  ...(update.disableWarningsUpdated ? ['~ disableWarnings()'] : []),
 ];
 
 /**
@@ -536,9 +537,7 @@ const COMMANDS: Record<string, (argv: string[]) => Promise<void>> = {
   },
   analyze: (argv) => {
     const [, dir] = positionals(argv);
-    return runAnalyze(path.resolve(dir ?? process.cwd()), isInteractive(), {
-      quiet: argv.includes('--quiet'),
-    });
+    return runAnalyze(path.resolve(dir ?? process.cwd()), isInteractive());
   },
 };
 

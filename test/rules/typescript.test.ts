@@ -1,7 +1,7 @@
 import type { Linter } from 'eslint';
 import { describe, expect, it } from 'vitest';
 import { javascriptPreset, typescriptPreset } from '../../src/app';
-import { byRule, configForFile, lintRule, lintSnippet, loadPresets, severityOf } from '../helpers';
+import { byRule, configForFile, lintRule, lintSnippet, severityOf } from '../helpers';
 
 const config = [...javascriptPreset(), ...typescriptPreset()];
 const FILE = 'src/some-file.ts';
@@ -82,15 +82,8 @@ describe('no-unused-vars swap', () => {
     expect(byRule(messages, 'no-unused-vars')).toEqual([]);
   });
 
-  it.each([
-    ['local (no CI)', { CI: '', NODE_ENV: '' }, 1],
-    ['CI', { CI: 'true', NODE_ENV: 'production' }, 2],
-  ])('uses dev-mode severity: %s', async (_label, env, expected) => {
-    const loaded = await loadPresets(env);
-    const resolved = await configForFile(
-      [...loaded.javascriptPreset(), ...loaded.typescriptPreset()],
-      FILE,
-    );
-    expect(severityOf(resolved, '@typescript-eslint/no-unused-vars')).toBe(expected);
+  it('is an error', async () => {
+    const resolved = await configForFile([...javascriptPreset(), ...typescriptPreset()], FILE);
+    expect(severityOf(resolved, '@typescript-eslint/no-unused-vars')).toBe(2);
   });
 });

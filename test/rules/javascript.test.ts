@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { javascriptPreset } from '../../src/app';
-import { configForFile, lintRule, loadPresets, severityOf, statements } from '../helpers';
+import { configForFile, lintRule, severityOf, statements } from '../helpers';
 
 const config = javascriptPreset({ testFiles: ['test/**'] });
 const FILE = 'src/some-file.js';
@@ -225,19 +225,10 @@ describe('unicorn/filename-case (kebabCase)', () => {
   });
 });
 
-describe('dev-mode severity', () => {
-  const devRules = ['no-console', 'no-debugger', 'no-unused-vars'];
-
-  it.each([
-    ['local (no CI)', { CI: '', NODE_ENV: '' }, 1],
-    ['NODE_ENV=development in CI', { CI: 'true', NODE_ENV: 'development' }, 1],
-    ['CI', { CI: 'true', NODE_ENV: 'production' }, 2],
-  ])('%s', async (_label, env, expected) => {
-    const loaded = await loadPresets(env);
-    const resolved = await configForFile(loaded.javascriptPreset(), FILE);
-    for (const rule of devRules) {
-      expect(severityOf(resolved, rule), rule).toBe(expected);
-    }
+describe('severity', () => {
+  it.each(['no-console', 'no-debugger', 'no-unused-vars'])('%s is an error', async (rule) => {
+    const resolved = await configForFile(javascriptPreset(), FILE);
+    expect(severityOf(resolved, rule), rule).toBe(2);
   });
 });
 

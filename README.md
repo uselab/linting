@@ -34,10 +34,10 @@ Run it in a git repository without uncommitted changes, so you can review and re
 ### Analyze
 
 ```sh
-npx uselab-linting analyze [dir] [--quiet]
+npx uselab-linting analyze [dir]
 ```
 
-Lints the project like the `lint` script and lists the rules that report problems, most relevant first (errors without autofix, then warnings), with counts, files and code excerpts. `--quiet` leaves out the warnings (like `eslint --quiet`). In an interactive terminal it first offers to run `lint:fix`, and auto-fixable problems are left out of the analysis.
+Lints the project like the `lint` script and lists the rules that report problems, most relevant first (errors without autofix, then warnings), with counts, files and code excerpts. In an interactive terminal it first offers to run `lint:fix`, and auto-fixable problems are left out of the analysis.
 
 In an interactive terminal you get one rule per cycle: the most relevant one (the top of the list). Choose what to do with it:
 
@@ -211,9 +211,21 @@ Test files have `max-lines` and `max-lines-per-function` turned off. There is no
 ...javascriptPreset({ testFiles: ['test/**', '**/*.{test,spec}.{js,ts}'] }),
 ```
 
-### Dev mode
+### Disabling warnings
 
-`no-console`, `no-debugger` and unused-vars rules are **warnings** locally and **errors** in CI (`CI` set and `NODE_ENV` not `development`).
+The `init` multiselect has an extra option, **disableWarnings** (enabled by default). It wraps the config in `disableWarnings([...])`, which sets every rule with severity `warn` (also `['warn', ...options]`) to `off`, so only errors are left. As it wraps the whole config, it also covers the rules of your own entries. With it enabled, the analysis contains no warnings. Without it, warnings are listed after the errors. The generated config looks like this:
+
+```ts
+import { globalIgnores } from 'eslint/config';
+import { disableWarnings, javascriptPreset, prettierPreset } from '@uselab/linting';
+
+export default disableWarnings([
+  // Lint scope: all files are linted, except the defaults.
+  globalIgnores(['**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo']),
+  ...javascriptPreset(),
+  ...prettierPreset,
+]);
+```
 
 ### Path aliases
 

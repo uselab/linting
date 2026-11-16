@@ -6,8 +6,9 @@ import {
   prettierPreset,
   typescriptPreset,
 } from '@uselab/linting';
+import { disableWarnings } from './src/features/eslint-presets/disable-warnings.ts';
 
-export default [
+export default disableWarnings([
   globalIgnores(['**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo']),
   ...javascriptPreset(),
   ...typescriptPreset(),
@@ -26,4 +27,4 @@ export default [
   },
   ...boundariesPreset({ tsconfig: 'tsconfig.json' }),
   ...prettierPreset,
-];
+]);

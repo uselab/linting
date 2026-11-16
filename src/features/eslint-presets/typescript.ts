@@ -1,7 +1,6 @@
 import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescript';
 import { importX } from 'eslint-plugin-import-x';
 import tseslint from 'typescript-eslint';
-import { devSeverity } from '../../support/env';
 import {
   ROOT_TOOLING_FILES,
   scopeConfigs,
@@ -60,7 +59,7 @@ const typescriptConfigs: Config[] = [
     files: TS_AND_VUE_FILES,
     rules: {
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': devSeverity(),
+      '@typescript-eslint/no-unused-vars': 'error',
       '@typescript-eslint/consistent-type-definitions': ['error', 'type'],
       '@typescript-eslint/consistent-type-imports': [
         'error',

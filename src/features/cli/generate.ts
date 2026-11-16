@@ -78,7 +78,12 @@ export type InitAnswers = {
   environment?: EnvironmentAnswers;
   /** Lint scope; all files when undefined. */
   ignores?: IgnoresAnswers;
+  /** Wrap the config in `disableWarnings([...])`, which sets every 'warn' rule to 'off'. */
+  disableWarnings?: boolean;
 };
+
+/** Name of the `@uselab/linting` export that turns off all warnings; wraps the config array. */
+export const DISABLE_WARNINGS = 'disableWarnings';
 
 /** The presets of a project type: a browser project also gets Node globals outside its files. */
 export const environmentPresets = (type: ProjectType): PresetId[] =>
@@ -276,16 +281,16 @@ export const orderPresets = (presets: readonly PresetId[]): PresetId[] =>
 /** Content of the generated `eslint.config.ts` / `eslint.config.mts`. */
 export const generateEslintConfig = (answers: InitAnswers): string => {
   const presets = orderPresets(answers.presets);
+  const wrap = answers.disableWarnings === true;
+  const imports = [...(wrap ? [DISABLE_WARNINGS] : []), ...presets.map(presetExport)];
   const lines = [
     `import { ${GLOBAL_IGNORES} } from '${GLOBAL_IGNORES_MODULE}';`,
-    ...(presets.length > 0
-      ? [`import { ${presets.map(presetExport).join(', ')} } from '${LINTING_PACKAGE}';`]
-      : []),
+    ...(imports.length > 0 ? [`import { ${imports.join(', ')} } from '${LINTING_PACKAGE}';`] : []),
     '',
-    'export default [',
+    wrap ? `export default ${DISABLE_WARNINGS}([` : 'export default [',
     ...ignoresLines(answers.ignores),
     ...presets.map((preset) => presetLine(preset, answers)),
-    '];',
+    wrap ? ']);' : '];',
     '',
   ];
   return lines.join('\n');

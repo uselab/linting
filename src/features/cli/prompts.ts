@@ -35,7 +35,12 @@ export const unwrap = <T>(value: T): Exclude<T, symbol> => {
   return process.exit(0);
 };
 
-const PRESET_OPTIONS: { value: PresetId; label: string; hint: string }[] = [
+/** Extra multiselect option next to the presets; not a preset itself. */
+const DISABLE_WARNINGS_OPTION = 'disableWarnings' as const;
+
+type SelectValue = PresetId | typeof DISABLE_WARNINGS_OPTION;
+
+const PRESET_OPTIONS: { value: SelectValue; label: string; hint: string }[] = [
   { value: 'javascript', label: 'javascript', hint: 'base rules, required by the other presets' },
   { value: 'typescript', label: 'typescript', hint: 'typescript-eslint for .ts/.tsx/.vue' },
   { value: 'prettier', label: 'prettier', hint: 'disables conflicting rules + .prettierrc.json' },
@@ -56,12 +61,19 @@ const PRESET_OPTIONS: { value: PresetId; label: string; hint: string }[] = [
     label: 'boundaries',
     hint: 'project structure, guided by the principles of Domain-Driven Design (DDD): app / features / support',
   },
+  {
+    value: DISABLE_WARNINGS_OPTION,
+    label: 'disableWarnings',
+    hint: "wraps the config in disableWarnings(): every rule set to 'warn' is turned off",
+  },
 ];
 
 const PRESET_LABEL_WIDTH = Math.max(...PRESET_OPTIONS.map(({ label }) => label.length));
 
 /** clack only shows `hint` on the focused option; put it in the label to always show it. */
-const withVisibleHints = (options: typeof PRESET_OPTIONS): { value: PresetId; label: string }[] =>
+const withVisibleHints = (
+  options: typeof PRESET_OPTIONS,
+): { value: SelectValue; label: string }[] =>
   options.map(({ value, label, hint }) => ({
     value,
     label: `${label.padEnd(PRESET_LABEL_WIDTH)}  ${styleText('dim', hint)}`,
@@ -415,6 +427,8 @@ export type AskOptions = {
   initialIgnores?: IgnoresAnswers;
   /** False when the existing `globalIgnores()` can't be rewritten; the scope isn't asked then. */
   ignoresEditable?: boolean;
+  /** Whether disabling warnings is preselected; true by default. */
+  initialDisableWarnings?: boolean;
 };
 
 const warnAboutPresets = (presets: PresetId[]): void => {
@@ -427,6 +441,33 @@ const warnAboutPresets = (presets: PresetId[]): void => {
   if (presets.includes('vue') && presets.includes('react')) {
     clack.log.warn('Both vue and react are selected. That is unusual, but allowed.');
   }
+};
+
+/** Asks which presets to use, plus whether to disable the warnings (enabled by default). */
+const askSelection = async (
+  projectType: ProjectType,
+  initialPresets: PresetId[],
+  initialDisableWarnings = true,
+): Promise<{ selected: PresetId[]; disableWarnings: boolean }> => {
+  // Node doesn't resolve the aliases, so a Node project can't use the aliases preset.
+  const options = PRESET_OPTIONS.filter(
+    ({ value }) => !(projectType === 'node' && value === 'aliases'),
+  );
+  const answered = unwrap(
+    await clack.multiselect<SelectValue>({
+      message: 'Which presets do you want?',
+      options: withVisibleHints(options),
+      initialValues: [
+        ...initialPresets.filter((preset) => options.some(({ value }) => value === preset)),
+        ...(initialDisableWarnings ? [DISABLE_WARNINGS_OPTION] : []),
+      ],
+      required: true,
+    }),
+  );
+  return {
+    selected: answered.filter((value): value is PresetId => value !== DISABLE_WARNINGS_OPTION),
+    disableWarnings: answered.includes(DISABLE_WARNINGS_OPTION),
+  };
 };
 
 /**
@@ -446,21 +487,13 @@ export const askAnswers = async ({
   detectedQueryLibrary,
   initialIgnores,
   ignoresEditable = true,
+  initialDisableWarnings,
 }: AskOptions): Promise<InitAnswers> => {
   const environment = await askEnvironment(initialProjectType, initialBrowserFiles);
-  // Node doesn't resolve the aliases, so a Node project can't use the aliases preset.
-  const options = PRESET_OPTIONS.filter(
-    ({ value }) => !(environment.type === 'node' && value === 'aliases'),
-  );
-  const selected = unwrap(
-    await clack.multiselect<PresetId>({
-      message: 'Which presets do you want?',
-      options: withVisibleHints(options),
-      initialValues: initialPresets.filter((preset) =>
-        options.some(({ value }) => value === preset),
-      ),
-      required: true,
-    }),
+  const { selected, disableWarnings } = await askSelection(
+    environment.type,
+    initialPresets,
+    initialDisableWarnings,
   );
   const basePresets = orderPresets([...selected, ...environmentPresets(environment.type)]);
   warnAboutPresets(basePresets);
@@ -484,7 +517,7 @@ export const askAnswers = async ({
       )
     : undefined;
   const ignores = ignoresEditable ? await askIgnores(initialIgnores) : undefined;
-  return { presets, javascript, boundaries, query, environment, ignores };
+  return { presets, javascript, boundaries, query, environment, ignores, disableWarnings };
 };
 
 export const confirm = async (

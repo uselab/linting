@@ -67,6 +67,29 @@ describe('generateEslintConfig', () => {
     );
   });
 
+  it('wraps the config in disableWarnings when enabled', () => {
+    const config = generateEslintConfig({
+      presets: ['javascript', 'prettier'],
+      disableWarnings: true,
+    });
+    expect(config).toBe(
+      [
+        "import { globalIgnores } from 'eslint/config';",
+        "import { disableWarnings, javascriptPreset, prettierPreset } from '@uselab/linting';",
+        '',
+        'export default disableWarnings([',
+        '  // Lint scope: all files are linted, except the defaults.',
+        '  globalIgnores([',
+        ...DEFAULT_LINES,
+        '  ]),',
+        '  ...javascriptPreset(),',
+        '  ...prettierPreset,',
+        ']);',
+        '',
+      ].join('\n'),
+    );
+  });
+
   it('places vueA11y right after vue', () => {
     const config = generateEslintConfig({ presets: ['prettier', 'vueA11y', 'react', 'vue'] });
     const spreadLines = config.split('\n').filter((line) => line.startsWith('  ...'));

@@ -1,13 +1,5 @@
 import type { Rules } from './shared';
 
-/**
- * Development mode relaxes some rules (console, debugger, unused vars) from error to warn.
- * Dev mode: NODE_ENV=development, or not running in CI.
- */
-export const isDevMode = (): boolean => process.env.NODE_ENV === 'development' || !process.env.CI;
-
-export const devSeverity = (): 'warn' | 'error' => (isDevMode() ? 'warn' : 'error');
-
 export const restrictedSyntaxEntries = [
   {
     selector: 'Literal[value=null]',

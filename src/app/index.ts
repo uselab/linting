@@ -2,6 +2,7 @@ import type { ESLint } from 'eslint';
 import { aliases } from '../features/eslint-presets/aliases';
 import { boundaries } from '../features/eslint-presets/boundaries';
 import { browser } from '../features/eslint-presets/browser';
+import { disableWarnings } from '../features/eslint-presets/disable-warnings';
 import { javascript } from '../features/eslint-presets/javascript';
 import { node } from '../features/eslint-presets/node';
 import { prettier } from '../features/eslint-presets/prettier';
@@ -17,7 +18,7 @@ import { templateStructurePlugin } from '../support/eslint-plugins/template-stru
  * eslint.config:
  *
  * ```ts
- * export default [
+ * export default disableWarnings([ // optional: sets every rule with 'warn' to 'off'
  *   globalIgnores(['**\/dist/**', '**\/node_modules/**', ...]), // from 'eslint/config'
  *   ...javascriptPreset(),
  *   ...typescriptPreset(),
@@ -26,13 +27,14 @@ import { templateStructurePlugin } from '../support/eslint-plugins/template-stru
  *   ...aliasesPreset(), // only when the bundler resolves the path aliases (e.g. Vite)
  *   ...nodePreset(), // after aliases: Node files may use relative imports
  *   ...prettierPreset, // always last
- * ];
+ * ]);
  * ```
  */
 export {
   aliases as aliasesPreset,
   boundaries as boundariesPreset,
   browser as browserPreset,
+  disableWarnings,
   javascript as javascriptPreset,
   node as nodePreset,
   prettier as prettierPreset,
@@ -48,7 +50,6 @@ export const plugins: Record<'templateStructure', ESLint.Plugin> = {
 };
 
 export { DEFAULT_IGNORES } from '../support/ignores';
-export { isDevMode } from '../support/env';
 export type { Config } from '../support/shared';
 export { type PresetOptions } from '../support/shared';
 export { type BoundariesOptions } from '../features/eslint-presets/boundaries';
