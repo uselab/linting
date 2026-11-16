@@ -205,7 +205,7 @@ const askQuery = async (
     await clack.select<QueryLibraryId | typeof NO_QUERY>({
       message: 'Which library handles server state? (no fetch / axios outside src/support/http)',
       options: [
-        { value: NO_QUERY, label: 'No' },
+        { value: NO_QUERY, label: "None (don't enforce this rule)" },
         ...libraries.map(({ id, label, framework }) => ({
           value: id,
           label,
@@ -487,5 +487,8 @@ export const askAnswers = async ({
   return { presets, javascript, boundaries, query, environment, ignores };
 };
 
-export const confirm = async (message: string, initialValue = true): Promise<boolean> =>
-  unwrap(await clack.confirm({ message, initialValue }));
+export const confirm = async (
+  message: string,
+  initialValue = true,
+  labels: { active?: string; inactive?: string } = {},
+): Promise<boolean> => unwrap(await clack.confirm({ message, initialValue, ...labels }));

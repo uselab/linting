@@ -11,8 +11,8 @@ export const confirmCopilotStart = async (): Promise<boolean> => {
   const answer = await clack.select<Answer>({
     message: 'Start Copilot?',
     options: [
-      { value: 'ok', label: 'Ok' },
-      { value: 'no', label: 'No' },
+      { value: 'ok', label: 'Yes' },
+      { value: 'no', label: "Go back, don't start Copilot" },
     ],
   });
   return !clack.isCancel(answer) && answer === 'ok';

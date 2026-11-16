@@ -49,6 +49,8 @@ const commitExistingChanges = async (projectDir: string): Promise<void> => {
     });
   const accepted = await confirm(
     `There are uncommitted changes. Commit them first to continue? ${styleText('dim', '(required: the CLI only changes a clean working tree)')}`,
+    true,
+    { inactive: 'Stop the analyze task' },
   );
   if (!accepted) {
     clack.cancel('Commit or stash your changes and run again.');
@@ -100,7 +102,11 @@ export const createCommitOffer = (
       return;
     }
     const defaultMessage = commitMessage(pending, summary);
-    if (await confirm('Do you want me to commit the changes I made?')) {
+    if (
+      await confirm('Do you want me to commit the changes I made?', true, {
+        inactive: 'Keep the changes, I will commit this later',
+      })
+    ) {
       const text = unwrap(
         await clack.multiline({
           message: `${COMMIT_MESSAGE} ${SUBMIT_HINT}`,
