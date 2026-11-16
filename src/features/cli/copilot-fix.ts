@@ -33,19 +33,39 @@ const instructionsFor = (ruleId: string): string | undefined => {
 };
 
 /**
+ * Makes user text safe to put in the prompt, which is passed through a shell inside double quotes:
+ * double quotes become single quotes, newlines become spaces and shell characters are removed.
+ */
+export const sanitizeInstructions = (text: string): string =>
+  text
+    .replaceAll('"', "'")
+    .replaceAll(/\s*[\r\n]+\s*/gu, ' ')
+    .replaceAll(/[`$%^&|<>\\]/gu, '')
+    .replaceAll(/\s+/gu, ' ')
+    .trim();
+
+/**
  * The prompt for Copilot: fix only the problems of one rule, without shortcuts. The text is in
  * `copilot-fix-prompt.json`; `{ruleId}` and `{messageFile}` are interpolated, and
  * `{ruleInstructions}` is replaced by the rule's entry in `copilot-rule-instructions.json`
  * (the line is dropped without one). The problems themselves come from the `check` command.
+ * `userInstructions` (already sanitized) are added at the end.
  */
-export const copilotFixPrompt = (ruleId: string, messageFile: string): string => {
+export const copilotFixPrompt = (
+  ruleId: string,
+  messageFile: string,
+  userInstructions?: string,
+): string => {
   const extra = instructionsFor(ruleId);
-  return promptTemplate.lines
+  const prompt = promptTemplate.lines
     .filter((line) => extra !== undefined || line !== INSTRUCTIONS_PLACEHOLDER)
     .map((line) => (line === INSTRUCTIONS_PLACEHOLDER ? (extra ?? '') : line))
     .join(' ')
     .replaceAll('{ruleId}', ruleId)
     .replaceAll('{messageFile}', messageFile);
+  return userInstructions
+    ? `${prompt} Extra instructions from the user: ${userInstructions}`
+    : prompt;
 };
 
 /**
@@ -86,7 +106,7 @@ export type CopilotResult = { ok: boolean; message?: string };
 export const runCopilotFix = (
   projectDir: string,
   ruleId: string,
-  files: string[],
+  { files, instructions }: { files: string[]; instructions?: string },
 ): CopilotResult => {
   if (!SAFE_RULE_ID.test(ruleId)) {
     clack.log.error(`Can't pass the rule name ${ruleId} to Copilot.`);
@@ -98,9 +118,14 @@ export const runCopilotFix = (
   }
   mkdirSync(path.join(projectDir, MESSAGE_DIR), { recursive: true });
   const messageFile = `${MESSAGE_DIR}/commit-${randomUUID()}.txt`;
+  const prompt = copilotFixPrompt(
+    ruleId,
+    messageFile,
+    instructions && sanitizeInstructions(instructions),
+  );
   const args = [
     '-i',
-    `"${copilotFixPrompt(ruleId, messageFile)}"`,
+    `"${prompt}"`,
     `--allow-tool="${allowWriteTools(messageFile, files)},${ALLOW_CHECK}"`,
   ];
   const result = spawnSync('copilot', args, { cwd: projectDir, stdio: 'inherit', shell: true });

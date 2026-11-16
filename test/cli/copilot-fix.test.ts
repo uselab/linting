@@ -16,8 +16,13 @@ vi.mock('@clack/prompts', () => ({
   },
 }));
 
-const { allowWriteTools, copilotFixPrompt, COPILOT_MISSING_MESSAGE, runCopilotFix } =
-  await import('../../src/features/cli/copilot-fix');
+const {
+  allowWriteTools,
+  copilotFixPrompt,
+  COPILOT_MISSING_MESSAGE,
+  runCopilotFix,
+  sanitizeInstructions,
+} = await import('../../src/features/cli/copilot-fix');
 const { default: ruleInstructions } =
   await import('../../src/features/cli/copilot-rule-instructions.json');
 
@@ -61,6 +66,24 @@ describe('copilotFixPrompt', () => {
 
   it('ignores prototype keys as rule ids', () => {
     expect(copilotFixPrompt('constructor', 'm.txt')).not.toContain('Specific guidance');
+  });
+
+  it('appends the instructions of the user', () => {
+    expect(copilotFixPrompt('no-console', 'm.txt', 'keep the API')).toMatch(
+      /Extra instructions from the user: keep the API$/u,
+    );
+  });
+});
+
+describe('sanitizeInstructions', () => {
+  it('makes text safe for a double-quoted shell argument', () => {
+    expect(sanitizeInstructions('say "hi"\n`rm` $HOME & more | <x> %y% ^z \\')).toBe(
+      "say 'hi' rm HOME more x y z",
+    );
+  });
+
+  it('keeps plain text', () => {
+    expect(sanitizeInstructions("  don't touch src/a.ts  ")).toBe("don't touch src/a.ts");
   });
 });
 
@@ -119,14 +142,14 @@ describe('runCopilotFix', () => {
 
   it('fails with a message when copilot is not available', () => {
     mocks.spawnSync.mockReturnValue({ status: 1 });
-    expect(runCopilotFix(dir, 'no-console', [])).toEqual({ ok: false });
+    expect(runCopilotFix(dir, 'no-console', { files: [] })).toEqual({ ok: false });
     expect(mocks.errors).toEqual([COPILOT_MISSING_MESSAGE]);
     expect(mocks.spawnSync).toHaveBeenCalledTimes(1);
   });
 
   it('starts copilot interactively, allowing writes to the rule files', () => {
     mocks.spawnSync.mockReturnValue({ status: 0 });
-    expect(runCopilotFix(dir, 'no-console', ['src/a.ts'])).toEqual({ ok: true });
+    expect(runCopilotFix(dir, 'no-console', { files: ['src/a.ts'] })).toEqual({ ok: true });
     const [command, args, options] = mocks.spawnSync.mock.calls[1] ?? [];
     expect(command).toBe('copilot');
     expect(args[0]).toBe('-i');
@@ -137,9 +160,17 @@ describe('runCopilotFix', () => {
     expect(options).toMatchObject({ cwd: dir, stdio: 'inherit' });
   });
 
+  it('adds sanitized extra instructions to the prompt', () => {
+    mocks.spawnSync.mockReturnValue({ status: 0 });
+    runCopilotFix(dir, 'no-console', { files: [], instructions: 'say "hi" `x`' });
+    expect(mocks.spawnSync.mock.calls[1]?.[1][1]).toContain(
+      "Extra instructions from the user: say 'hi' x",
+    );
+  });
+
   it('returns the first line of the commit message and removes the file', () => {
     copilotWrites('\nFix no-console usages\nmore\n');
-    expect(runCopilotFix(dir, 'no-console', [])).toEqual({
+    expect(runCopilotFix(dir, 'no-console', { files: [] })).toEqual({
       ok: true,
       message: 'Fix no-console usages',
     });
@@ -148,18 +179,18 @@ describe('runCopilotFix', () => {
 
   it('returns no message when copilot wrote none', () => {
     mocks.spawnSync.mockReturnValue({ status: 0 });
-    expect(runCopilotFix(dir, 'no-console', []).message).toBeUndefined();
+    expect(runCopilotFix(dir, 'no-console', { files: [] }).message).toBeUndefined();
     expect(existsSync(path.join(dir, 'node_modules/.cache/uselab-linting'))).toBe(true);
   });
 
   it('reports a failing copilot', () => {
     copilotWrites('x', 1);
-    expect(runCopilotFix(dir, 'no-console', []).ok).toBe(false);
+    expect(runCopilotFix(dir, 'no-console', { files: [] }).ok).toBe(false);
     expect(mocks.errors).toEqual(['Copilot did not finish successfully.']);
   });
 
   it('rejects rule names that are unsafe for a shell', () => {
-    expect(runCopilotFix(dir, 'x"; rm -rf /', [])).toEqual({ ok: false });
+    expect(runCopilotFix(dir, 'x"; rm -rf /', { files: [] })).toEqual({ ok: false });
     expect(mocks.spawnSync).not.toHaveBeenCalled();
   });
 });

@@ -510,4 +510,3 @@ describe('run init', () => {
     expect(existsSync(path.join(dir, 'eslint.config.ts'))).toBe(false);
   });
 });
-

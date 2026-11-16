@@ -76,6 +76,7 @@ export type RuleOutcome = 'changed' | 'skipped' | 'finished';
 
 type ChangeAction = Exclude<RuleAction, 'skip' | 'finish'>;
 type Step = [summary: string | (() => string), change: () => Promise<boolean> | boolean];
+type StepContext = { ruleId: string; problems: Problem[]; instructions?: string };
 
 /** The files with problems of the rule. */
 const ruleFiles = (ruleId: string, problems: Problem[]): string[] => [
@@ -83,12 +84,15 @@ const ruleFiles = (ruleId: string, problems: Problem[]): string[] => [
 ];
 
 /** Fixes the rule with Copilot; its commit message becomes the default commit message. */
-const copilotStep = (projectDir: string, ruleId: string, problems: Problem[]): Step => {
+const copilotStep = (projectDir: string, { ruleId, problems, instructions }: StepContext): Step => {
   let message: string | undefined;
   return [
     () => message ?? `Fixed ${ruleId} with Copilot`,
     () => {
-      const result = runCopilotFix(projectDir, ruleId, ruleFiles(ruleId, problems));
+      const result = runCopilotFix(projectDir, ruleId, {
+        files: ruleFiles(ruleId, problems),
+        instructions,
+      });
       message = result.message;
       return result.ok;
     },
@@ -96,40 +100,44 @@ const copilotStep = (projectDir: string, ruleId: string, problems: Problem[]): S
 };
 
 /** The commit summary and the change of an action that may change the project. */
-const stepFor = (
-  action: ChangeAction,
-  projectDir: string,
-  { ruleId, problems }: { ruleId: string; problems: Problem[] },
-): Step => {
-  const steps: Record<ChangeAction, Step> = {
-    copilot: copilotStep(projectDir, ruleId, problems),
-    disable: [
+const stepFor = (action: ChangeAction, projectDir: string, context: StepContext): Step => {
+  const { ruleId, problems } = context;
+  const steps: Record<ChangeAction, () => Step> = {
+    copilot: () => copilotStep(projectDir, context),
+    disable: () => [
       `Disabled ${ruleId} in the ESLint config`,
       () => writeDisabledRules(projectDir, [ruleId]),
     ],
-    ignore: [
+    ignore: () => [
       `Added eslint-disable comments for ${ruleId}`,
       () => ignoreRules(projectDir, [ruleId], problems),
     ],
-    editIgnores: [
+    editIgnores: () => [
       'Updated the lint scope in the ESLint config',
       () => editGlobalIgnores(projectDir),
     ],
   };
-  return steps[action];
+  return steps[action]();
 };
 
 /** Whether to ask for an action again after an action that changed nothing. */
 const asksAgain = (action: ChangeAction, declined: boolean): boolean =>
   declined || action === 'editIgnores';
 
-/** Whether the action may start. Copilot needs a clean tree first and the user's consent. */
-const mayStart = async (action: ChangeAction, commits: CommitOffer): Promise<boolean> => {
+/**
+ * Whether the action may start, with the extra Copilot instructions if given. Copilot needs a
+ * clean tree first and the user's consent.
+ */
+const mayStart = async (
+  action: ChangeAction,
+  commits: CommitOffer,
+): Promise<{ start: boolean; instructions?: string }> => {
   if (action !== 'copilot') {
-    return true;
+    return { start: true };
   }
   await commits.ensureClean();
-  return confirmCopilotStart();
+  const confirmed = await confirmCopilotStart();
+  return { start: confirmed !== undefined, instructions: confirmed?.instructions };
 };
 
 /**
@@ -147,10 +155,13 @@ export const applyRuleAction = async (
     if (action === 'skip' || action === 'finish') {
       return action === 'skip' ? 'skipped' : 'finished';
     }
-    const declined = !(await mayStart(action, commits));
+    const { start, instructions } = await mayStart(action, commits);
+    const declined = !start;
     const changed =
       !declined &&
-      (await commits.step(...stepFor(action, projectDir, { ruleId: choice.ruleId, problems })));
+      (await commits.step(
+        ...stepFor(action, projectDir, { ruleId: choice.ruleId, problems, instructions }),
+      ));
     if (changed) {
       return 'changed';
     }
