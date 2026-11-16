@@ -34,10 +34,10 @@ Run it in a git repository without uncommitted changes, so you can review and re
 ### Analyze
 
 ```sh
-npx uselab-linting analyze [dir]
+npx uselab-linting analyze [dir] [--quiet]
 ```
 
-Lints the project like the `lint` script and lists the rules that report problems, most relevant first (errors without autofix, then warnings), with counts, files and code excerpts. In an interactive terminal it first offers to run `lint:fix`, and auto-fixable problems are left out of the analysis.
+Lints the project like the `lint` script and lists the rules that report problems, most relevant first (errors without autofix, then warnings), with counts, files and code excerpts. `--quiet` leaves out the warnings (like `eslint --quiet`). In an interactive terminal it first offers to run `lint:fix`, and auto-fixable problems are left out of the analysis.
 
 In an interactive terminal you get one rule per cycle: the most relevant one (the top of the list). Choose what to do with it:
 
@@ -52,10 +52,10 @@ Esc stops and continues to the report. The report shows only the rule being aske
 ### Check
 
 ```sh
-npx uselab-linting check <rule> [dir]
+npx uselab-linting check <rule> [dir] [--with-warnings]
 ```
 
-Lints the project and lists only the problems of one rule (e.g. `@typescript-eslint/no-explicit-any`). Exits with 1 when there are any. Used by the Copilot fix action.
+Lints the project and lists only the errors of one rule (e.g. `@typescript-eslint/no-explicit-any`). Warnings are hidden unless you pass `--with-warnings`. Exits with 1 when there are any. Used by the Copilot fix action.
 
 ### Commit prompts
 

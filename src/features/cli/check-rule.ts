@@ -1,10 +1,14 @@
 import { existsSync, statSync } from 'node:fs';
 import { collectProblems, lintProject } from './analyze';
 
-/** The `check` command: lists the problems of one ESLint rule. Exits with 1 when there are any. */
-export const runCheckRule = async (projectDir: string, ruleId: string | undefined) => {
+/** The `check` command: lists the errors of one ESLint rule (and its warnings with `--with-warnings`). Exits with 1 when there are any. */
+export const runCheckRule = async (
+  projectDir: string,
+  ruleId: string | undefined,
+  withWarnings = false,
+) => {
   if (!ruleId) {
-    process.stderr.write('Usage: uselab-linting check <rule> [dir]\n');
+    process.stderr.write('Usage: uselab-linting check <rule> [dir] [--with-warnings]\n');
     process.exitCode = 1;
     return;
   }
@@ -13,9 +17,10 @@ export const runCheckRule = async (projectDir: string, ruleId: string | undefine
     process.exitCode = 1;
     return;
   }
-  const problems = collectProblems(projectDir, await lintProject(projectDir)).filter(
-    (problem) => problem.ruleId === ruleId,
-  );
+  const problems = collectProblems(
+    projectDir,
+    await lintProject(projectDir, { quiet: !withWarnings }),
+  ).filter((problem) => problem.ruleId === ruleId);
   if (problems.length === 0) {
     process.stdout.write(`No problems for ${ruleId}.\n`);
     return;

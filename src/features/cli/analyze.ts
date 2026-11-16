@@ -397,7 +397,7 @@ export const fileSourceReader = (projectDir: string): SourceReader => {
 /** Lints the whole project like the `lint` script (`eslint .` with its cache). */
 export const lintProject = async (
   projectDir: string,
-  fix = false,
+  { fix = false, quiet = false }: { fix?: boolean; quiet?: boolean } = {},
 ): Promise<ESLint.LintResult[]> => {
   const { ESLint: Linter } = await import('eslint');
   const eslint = new Linter({
@@ -411,17 +411,20 @@ export const lintProject = async (
   if (fix) {
     await Linter.outputFixes(results);
   }
-  return results;
+  return quiet ? Linter.getErrorResults(results) : results;
 };
 
-const lintWithSpinner = async (projectDir: string, interactive: boolean, fix: boolean) => {
+const lintWithSpinner = async (
+  projectDir: string,
+  { interactive, fix, quiet }: { interactive: boolean; fix: boolean; quiet: boolean },
+) => {
   if (!interactive) {
-    return lintProject(projectDir);
+    return lintProject(projectDir, { quiet });
   }
   const spinner = clack.spinner();
   spinner.start(fix ? 'Running ESLint with --fix' : 'Running ESLint');
   try {
-    const results = await lintProject(projectDir, fix);
+    const results = await lintProject(projectDir, { fix, quiet });
     spinner.stop('ESLint finished');
     return results;
   } catch (error) {
@@ -520,7 +523,11 @@ const handleRules = async (
 export const runAnalyze = async (
   projectDir: string,
   interactive: boolean,
-  { intro = true, commits }: { intro?: boolean; commits?: CommitOffer } = {},
+  {
+    intro = true,
+    commits,
+    quiet = false,
+  }: { intro?: boolean; commits?: CommitOffer; quiet?: boolean } = {},
 ): Promise<void> => {
   if (isMissingDirectory(projectDir)) {
     return;
@@ -533,7 +540,7 @@ export const runAnalyze = async (
   const excludeFixable = interactive;
   let run = 0;
   const lintAndCollect = async (fix: boolean) =>
-    collectProblems(projectDir, await lintWithSpinner(projectDir, interactive, fix));
+    collectProblems(projectDir, await lintWithSpinner(projectDir, { interactive, fix, quiet }));
   const lintProblems = async (fix: boolean) =>
     fix ? commitOffer.step('Ran lint:fix', () => lintAndCollect(true)) : lintAndCollect(false);
   const offerFix = async (problems: Problem[]): Promise<boolean> => {

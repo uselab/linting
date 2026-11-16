@@ -75,7 +75,8 @@ import { isInstalledOutdated } from './install';
 import { ownVersion } from './own-version';
 
 export const USAGE = `Usage: uselab-linting init [dir]
-       uselab-linting analyze [dir]
+       uselab-linting analyze [dir] [--quiet]
+       uselab-linting check <rule> [dir] [--with-warnings]
        uselab-linting copilot-hook
 
 Sets up @uselab/linting in a project. Detects the framework to preselect presets, replaces any
@@ -86,8 +87,9 @@ be inside a git repository without uncommitted changes.
   dir            Target project directory (default: current directory)
   analyze        Lints the project and lists the rules with errors/warnings by relevance, with
                  code examples; offers to disable rules or ignore them with comments, and to
-                 write LINT-ANALYSIS.md
-  check          Lints the project and lists only the problems of one rule (exit 1 when any)
+                 write LINT-ANALYSIS.md; --quiet leaves out the warnings
+  check          Lints the project and lists only the errors of one rule (exit 1 when any);
+                 --with-warnings includes the warnings
   copilot-hook   GitHub Copilot postToolUse hook: formats and lint-fixes the edited files
                  (JSON payload on stdin) and reports the remaining errors to the agent`;
 
@@ -497,11 +499,21 @@ const runInit = async (dir: string | undefined): Promise<void> => {
 const isHelp = (command: string | undefined): boolean =>
   command === '--help' || command === '-h' || command === 'help';
 
+const positionals = (argv: string[]): string[] => argv.filter((arg) => !arg.startsWith('--'));
+
 /** The commands that take a project directory, by name. */
 const COMMANDS: Record<string, (argv: string[]) => Promise<void>> = {
   init: ([, dir]) => runInit(dir),
-  check: ([, rule, dir]) => runCheckRule(path.resolve(dir ?? process.cwd()), rule),
-  analyze: ([, dir]) => runAnalyze(path.resolve(dir ?? process.cwd()), isInteractive()),
+  check: (argv) => {
+    const [, rule, dir] = positionals(argv);
+    return runCheckRule(path.resolve(dir ?? process.cwd()), rule, argv.includes('--with-warnings'));
+  },
+  analyze: (argv) => {
+    const [, dir] = positionals(argv);
+    return runAnalyze(path.resolve(dir ?? process.cwd()), isInteractive(), {
+      quiet: argv.includes('--quiet'),
+    });
+  },
 };
 
 /** Entry point of the CLI. */
