@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import * as clack from '@clack/prompts';
 import promptTemplate from './copilot-fix-prompt.json';
+import ruleInstructions from './copilot-rule-instructions.json';
 
 const SAFE_RULE_ID = /^[\w@/.-]+$/u;
 /** Paths that can be put in the quoted `--allow-tool` value without escaping. */
@@ -20,16 +21,32 @@ export const COPILOT_MISSING_MESSAGE =
 export const isCopilotAvailable = (): boolean =>
   spawnSync('copilot', ['--version'], { shell: true, stdio: 'ignore' }).status === 0;
 
+const INSTRUCTIONS_PLACEHOLDER = '{ruleInstructions}';
+
+/** The rule-specific instructions from `copilot-rule-instructions.json`, if the rule has any. */
+const instructionsFor = (ruleId: string): string | undefined => {
+  const rules: Record<string, string[]> = ruleInstructions.rules;
+  const lines = Object.hasOwn(rules, ruleId) ? rules[ruleId] : undefined;
+  return lines && lines.length > 0
+    ? `Specific guidance for this rule: ${lines.join(' ')}`
+    : undefined;
+};
+
 /**
  * The prompt for Copilot: fix only the problems of one rule, without shortcuts. The text is in
- * `copilot-fix-prompt.json`; `{ruleId}` and `{messageFile}` are interpolated. The problems
- * themselves come from the `check` command.
+ * `copilot-fix-prompt.json`; `{ruleId}` and `{messageFile}` are interpolated, and
+ * `{ruleInstructions}` is replaced by the rule's entry in `copilot-rule-instructions.json`
+ * (the line is dropped without one). The problems themselves come from the `check` command.
  */
-export const copilotFixPrompt = (ruleId: string, messageFile: string): string =>
-  promptTemplate.lines
+export const copilotFixPrompt = (ruleId: string, messageFile: string): string => {
+  const extra = instructionsFor(ruleId);
+  return promptTemplate.lines
+    .filter((line) => extra !== undefined || line !== INSTRUCTIONS_PLACEHOLDER)
+    .map((line) => (line === INSTRUCTIONS_PLACEHOLDER ? (extra ?? '') : line))
     .join(' ')
     .replaceAll('{ruleId}', ruleId)
     .replaceAll('{messageFile}', messageFile);
+};
 
 /**
  * The `--allow-tool` value that lets Copilot write the message file and the files with problems

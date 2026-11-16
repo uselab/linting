@@ -1,0 +1,14 @@
+{
+  "description": "Extra instructions for Copilot per ESLint rule, added to the fix prompt. The key is the rule id, the value is a list of lines that are joined with a space. Keep them free of double quotes, backticks and shell characters (single quotes are fine): the prompt is passed through a shell inside double quotes.",
+  "rules": {
+    "@typescript-eslint/no-explicit-any": [
+      "Replace any with the real type, a generic, or unknown with a type guard.",
+      "Prefer types that already exist in the project or its dependencies over new ones."
+    ],
+    "uselab-layout/file-location": [],
+    "max-params": [
+      "Booleans and numbers are usually better in a single object parameter than as separate parameters.",
+      "A single object parameter with properties for each boolean or number are better in many cases. It is more readable."
+    ]
+  }
+}

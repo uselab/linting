@@ -18,6 +18,8 @@ vi.mock('@clack/prompts', () => ({
 
 const { allowWriteTools, copilotFixPrompt, COPILOT_MISSING_MESSAGE, runCopilotFix } =
   await import('../../src/features/cli/copilot-fix');
+const { default: ruleInstructions } =
+  await import('../../src/features/cli/copilot-rule-instructions.json');
 
 describe('copilotFixPrompt', () => {
   const prompt = copilotFixPrompt('@typescript-eslint/no-explicit-any', 'tmp/message.txt');
@@ -43,6 +45,33 @@ describe('copilotFixPrompt', () => {
 
   it('is one line without double quotes', () => {
     expect(prompt).not.toMatch(/["`\n]/u);
+  });
+
+  it('adds the instructions of the rule, when it has any', () => {
+    const lines = ruleInstructions.rules['@typescript-eslint/no-explicit-any'];
+    expect(prompt).toContain(`Specific guidance for this rule: ${lines.join(' ')}`);
+  });
+
+  it('leaves the prompt without a stray placeholder for other rules', () => {
+    const other = copilotFixPrompt('no-console', 'tmp/message.txt');
+    expect(other).not.toContain('Specific guidance');
+    expect(other).not.toContain('{');
+    expect(other).not.toContain('  ');
+  });
+
+  it('ignores prototype keys as rule ids', () => {
+    expect(copilotFixPrompt('constructor', 'm.txt')).not.toContain('Specific guidance');
+  });
+});
+
+describe('copilot-rule-instructions.json', () => {
+  it.each(Object.entries(ruleInstructions.rules))('is shell-safe for %s', (ruleId, lines) => {
+    expect(ruleId).toMatch(/^[\w@/.-]+$/u);
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      expect(line.trim()).not.toBe('');
+      expect(line).not.toMatch(/["`\n{}]/u);
+    }
   });
 });
 
