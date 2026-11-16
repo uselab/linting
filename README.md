@@ -52,10 +52,10 @@ Esc stops and continues to the report. The report shows only the rule being aske
 ### Check
 
 ```sh
-npx uselab-linting check <rule> [dir] [--with-warnings]
+npx uselab-linting check <rule> [dir] [--with-warnings] [--max-errors <n>]
 ```
 
-Lints the project and lists only the errors of one rule (e.g. `@typescript-eslint/no-explicit-any`). Warnings are hidden unless you pass `--with-warnings`. Exits with 1 when there are any. Used by the Copilot fix action.
+Lints the project and lists only the errors of one rule (e.g. `@typescript-eslint/no-explicit-any`). Warnings are hidden unless you pass `--with-warnings`. At most 50 problems are listed (change it with `--max-errors`); the last line then reads `Only first 50 errors of 90 total`. Exits with 1 when there are any. Used by the Copilot fix action.
 
 ### Commit prompts
 
