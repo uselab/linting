@@ -140,6 +140,38 @@ describe('max-lines-per-function (max 100, skip blank lines and comments, IIFEs)
   });
 });
 
+describe('jsx/tsx limits (max-lines 800, max-lines-per-function 200, max-depth 5)', () => {
+  const TSX = 'src/component.tsx';
+  const fn = (bodyLines: number): string =>
+    `export const f = () => {\n${statements(bodyLines, '  ')}\n};`;
+
+  it.each(['src/component.tsx', 'src/component.jsx'])('allows 800 lines (%s)', async (file) => {
+    expect(await lintRule(config, 'max-lines')(file, statements(800))).toEqual([]);
+  });
+
+  it('reports 801 lines', async () => {
+    expect(await lintRule(config, 'max-lines')(TSX, statements(801))).toHaveLength(1);
+  });
+
+  it('allows a 200 line function', async () => {
+    expect(await lintRule(config, 'max-lines-per-function')(TSX, fn(198))).toEqual([]);
+  });
+
+  it('reports a 201 line function', async () => {
+    expect(await lintRule(config, 'max-lines-per-function')(TSX, fn(199))).toHaveLength(1);
+  });
+
+  it('allows depth 5 and reports depth 6', async () => {
+    const lint = lintRule(config, 'max-depth');
+    expect(await lint(TSX, `export const f = () => {\n${nestedIfs(5)}};`)).toEqual([]);
+    expect(await lint(TSX, `export const f = () => {\n${nestedIfs(6)}};`)).toHaveLength(1);
+  });
+
+  it('keeps test files off', async () => {
+    expect(await lintRule(config, 'max-lines')('test/component.tsx', statements(801))).toEqual([]);
+  });
+});
+
 describe('no-param-reassign (props: true)', () => {
   it('reports reassigning a parameter', async () => {
     const code = 'export const f = (p) => { p = 1; return p; };';

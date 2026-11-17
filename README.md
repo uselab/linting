@@ -171,11 +171,12 @@ typescriptPreset({ files: ['src/**'], ignores: ['src/legacy/**'] });
 
 ### Size limits
 
-| Rule                      | Limit                                                                          |
-| ------------------------- | ------------------------------------------------------------------------------ |
-| `max-lines`               | 500 per file (off for `.vue`, `eslint.config.*` and [test files](#test-files)) |
-| `max-lines-per-function`  | 100 (off for [test files](#test-files))                                        |
-| `vue/max-lines-per-block` | `<template>` 200, `<script>` 300, `<style>` 300                                |
+| Rule                      | Limit                                                                                                 |
+| ------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `max-lines`               | 500 per file, 800 for `.jsx`/`.tsx` (off for `.vue`, `eslint.config.*` and [test files](#test-files)) |
+| `max-lines-per-function`  | 100, 200 for `.jsx`/`.tsx` (off for [test files](#test-files))                                        |
+| `max-depth`               | 4, 5 for `.jsx`/`.tsx`                                                                                |
+| `vue/max-lines-per-block` | `<template>` 200, `<script>` 300, `<style>` 300                                                       |
 
 Blank lines are not counted.
 

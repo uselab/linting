@@ -95,6 +95,18 @@ export const javascript = (options: JavaScriptOptions = {}): Config[] => {
           'no-console': 'off',
         },
       },
+      {
+        name: 'uselab/javascript/jsx',
+        files: ['**/*.jsx', '**/*.tsx'],
+        rules: {
+          'max-lines': ['error', { max: 800, skipBlankLines: true, skipComments: true }],
+          'max-lines-per-function': [
+            'error',
+            { max: 200, skipBlankLines: true, skipComments: true, IIFEs: true },
+          ],
+          'max-depth': ['error', 5],
+        },
+      },
       // ESLint rejects an empty `files` array, so there is no tests block without test files.
       ...((testFiles.length === 0
         ? []
