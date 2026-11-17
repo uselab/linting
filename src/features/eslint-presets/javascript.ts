@@ -3,7 +3,7 @@ import { importX } from 'eslint-plugin-import-x';
 import sonarjs from 'eslint-plugin-sonarjs';
 import unicorn from 'eslint-plugin-unicorn';
 import globals from 'globals';
-import { devSeverity, restrictedSyntax } from '../../support/env';
+import { restrictedSyntax } from '../../support/env';
 import {
   ROOT_TOOLING_FILES,
   scopeConfigs,
@@ -13,6 +13,9 @@ import {
 } from '../../support/shared';
 
 const houseRules: Rules = {
+  'no-debugger': 'error',
+  'no-console': 'error',
+  'no-unused-vars': 'error',
   'no-alert': 'error',
   'no-continue': 'error',
   'no-param-reassign': ['error', { props: true }],
@@ -59,13 +62,6 @@ export type JavaScriptOptions = PresetOptions & {
   testFiles?: string[];
 };
 
-// Built at load time, like the other presets, so dev mode is evaluated when the module loads.
-const devRules: Rules = {
-  'no-debugger': devSeverity(),
-  'no-console': devSeverity(),
-  'no-unused-vars': devSeverity(),
-};
-
 /**
  * Base preset for every project: ESLint recommended, import-x, sonarjs, unicorn and the
  * Uselab house rules. Also configures root-level tooling files and *.cjs files for Node.
@@ -79,7 +75,7 @@ export const javascript = (options: JavaScriptOptions = {}): Config[] => {
       {
         name: 'uselab/javascript/rules',
         plugins: { sonarjs, unicorn },
-        rules: { ...houseRules, ...devRules },
+        rules: houseRules,
       },
       {
         name: 'uselab/javascript/commonjs',
@@ -97,6 +93,18 @@ export const javascript = (options: JavaScriptOptions = {}): Config[] => {
         },
         rules: {
           'no-console': 'off',
+        },
+      },
+      {
+        name: 'uselab/javascript/jsx',
+        files: ['**/*.jsx', '**/*.tsx'],
+        rules: {
+          'max-lines': ['error', { max: 800, skipBlankLines: true, skipComments: true }],
+          'max-lines-per-function': [
+            'error',
+            { max: 200, skipBlankLines: true, skipComments: true, IIFEs: true },
+          ],
+          'max-depth': ['error', 5],
         },
       },
       // ESLint rejects an empty `files` array, so there is no tests block without test files.

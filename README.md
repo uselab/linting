@@ -34,15 +34,15 @@ Run it in a git repository without uncommitted changes, so you can review and re
 ### Analyze
 
 ```sh
-npx uselab-linting analyze [dir] [--quiet]
+npx uselab-linting analyze [dir]
 ```
 
-Lints the project like the `lint` script and lists the rules that report problems, most relevant first (errors without autofix, then warnings), with counts, files and code excerpts. `--quiet` leaves out the warnings (like `eslint --quiet`). In an interactive terminal it first offers to run `lint:fix`, and auto-fixable problems are left out of the analysis.
+Lints the project like the `lint` script and lists the rules that report problems, most relevant first (errors without autofix, then warnings), with counts, files and code excerpts. In an interactive terminal it first offers to run `lint:fix`, and auto-fixable problems are left out of the analysis.
 
 In an interactive terminal you get one rule per cycle: the most relevant one (the top of the list). Choose what to do with it:
 
 - **skip**: leave the rule as is (you fix it yourself) and show the next one;
-- **fix with Copilot**: starts the [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) (`copilot`, which must be installed; otherwise an error is shown and the rule is skipped) with a prompt to fix only the problems of this rule, without shortcuts such as disabling the rule. If it has difficulty, it asks you for permission to comment a problem out. Copilot verifies its work with `uselab-linting check <rule>`; Before Copilot starts you are told that you return to the CLI when it is done and that you leave it with `/exit`; choose "Ok", "Ok, don't ask me again" (for the rest of the run) or "No" (back to the menu). Copilot may edit the files with problems without asking, other files need your permission. It writes a commit message that is used as the default in the commit offer. Type `/exit` when it is done; the flow then continues (commit offer, ESLint re-run, next rule);
+- **fix with Copilot**: starts the [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) (`copilot`, which must be installed; otherwise an error is shown and the rule is skipped) with a prompt to fix only the problems of this rule, without shortcuts such as disabling the rule. If it has difficulty, it asks you for permission to comment a problem out. Copilot verifies its work with `uselab-linting check <rule>`; Before Copilot starts you are told that you return to the CLI when it is done and that you leave it with `/exit`; choose "Ok", "Ok, don't ask me again" (for the rest of the run) or "No" (back to the menu). Copilot may edit the files with problems without asking, other files need your permission. It writes a commit message that is used as the default in the commit offer. Type `/exit` when it is done; the flow then continues (commit offer, ESLint re-run, next rule). Rule-specific guidance for the prompt can be added per rule in `src/features/cli/copilot-rule-instructions.json` (rule id → list of lines; no double quotes or backticks, as the prompt goes through a shell);
 - **ignore with comments**: add `eslint-disable-next-line` comments above the existing problems; the rule stays active for new code;
 - **disable**: turn the rule off in a `// disable-rules` entry of the ESLint config;
 - **edit ESLint ignore configuration**: change the `globalIgnores()` scope.
@@ -52,10 +52,10 @@ Esc stops and continues to the report. The report shows only the rule being aske
 ### Check
 
 ```sh
-npx uselab-linting check <rule> [dir] [--with-warnings]
+npx uselab-linting check <rule> [dir] [--with-warnings] [--max-errors <n>]
 ```
 
-Lints the project and lists only the errors of one rule (e.g. `@typescript-eslint/no-explicit-any`). Warnings are hidden unless you pass `--with-warnings`. Exits with 1 when there are any. Used by the Copilot fix action.
+Lints the project and lists only the errors of one rule (e.g. `@typescript-eslint/no-explicit-any`). Warnings are hidden unless you pass `--with-warnings`. At most 50 problems are listed (change it with `--max-errors`); the last line then reads `Only first 50 errors of 90 total`. Exits with 1 when there are any. Used by the Copilot fix action.
 
 ### Commit prompts
 
@@ -171,11 +171,12 @@ typescriptPreset({ files: ['src/**'], ignores: ['src/legacy/**'] });
 
 ### Size limits
 
-| Rule                      | Limit                                                                          |
-| ------------------------- | ------------------------------------------------------------------------------ |
-| `max-lines`               | 500 per file (off for `.vue`, `eslint.config.*` and [test files](#test-files)) |
-| `max-lines-per-function`  | 100 (off for [test files](#test-files))                                        |
-| `vue/max-lines-per-block` | `<template>` 200, `<script>` 300, `<style>` 300                                |
+| Rule                      | Limit                                                                                                 |
+| ------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `max-lines`               | 500 per file, 800 for `.jsx`/`.tsx` (off for `.vue`, `eslint.config.*` and [test files](#test-files)) |
+| `max-lines-per-function`  | 100, 200 for `.jsx`/`.tsx` (off for [test files](#test-files))                                        |
+| `max-depth`               | 4, 5 for `.jsx`/`.tsx`                                                                                |
+| `vue/max-lines-per-block` | `<template>` 200, `<script>` 300, `<style>` 300                                                       |
 
 Blank lines are not counted.
 
@@ -211,9 +212,21 @@ Test files have `max-lines` and `max-lines-per-function` turned off. There is no
 ...javascriptPreset({ testFiles: ['test/**', '**/*.{test,spec}.{js,ts}'] }),
 ```
 
-### Dev mode
+### Disabling warnings
 
-`no-console`, `no-debugger` and unused-vars rules are **warnings** locally and **errors** in CI (`CI` set and `NODE_ENV` not `development`).
+The `init` multiselect has an extra option, **disableWarnings** (enabled by default). It wraps the config in `disableWarnings([...])`, which sets every rule with severity `warn` (also `['warn', ...options]`) to `off`, so only errors are left. As it wraps the whole config, it also covers the rules of your own entries. With it enabled, the analysis contains no warnings. Without it, warnings are listed after the errors. The generated config looks like this:
+
+```ts
+import { globalIgnores } from 'eslint/config';
+import { disableWarnings, javascriptPreset, prettierPreset } from '@uselab/linting';
+
+export default disableWarnings([
+  // Lint scope: all files are linted, except the defaults.
+  globalIgnores(['**/dist/**', '**/node_modules/**', '**/*.tsbuildinfo']),
+  ...javascriptPreset(),
+  ...prettierPreset,
+]);
+```
 
 ### Path aliases
 

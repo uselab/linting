@@ -8,6 +8,7 @@ import {
   DEFAULT_TEST_FILES,
   generateEslintConfig,
   type IgnoresAnswers,
+  type InitAnswers,
   type PresetId,
 } from '../../src/features/cli/generate';
 
@@ -75,9 +76,17 @@ describe('readEslintConfig', () => {
       nodeEditable: true,
       ignores: { mode: 'all', globs: [] },
       ignoresEditable: true,
+      disableWarnings: false,
     });
   });
 
+  it('reads a disableWarnings([...]) wrapper', () => {
+    const text = generateEslintConfig({ presets: ['javascript'], disableWarnings: true });
+    expect(readEslintConfig(text)).toMatchObject({
+      disableWarnings: true,
+      presets: ['javascript'],
+    });
+  });
   it('reads the vueA11y preset', () => {
     const text = generateEslintConfig({ presets: ['javascript', 'vue', 'vueA11y'] });
     expect(readEslintConfig(text)?.presets).toEqual(['javascript', 'vue', 'vueA11y']);
@@ -194,7 +203,33 @@ describe('updateEslintConfig', () => {
       queryUpdated: false,
       globalsUpdated: [],
       ignoresUpdated: false,
+      disableWarningsUpdated: false,
     });
+  });
+
+  const KEPT_ANSWERS: InitAnswers = {
+    presets: ['javascript', 'boundaries', 'prettier'],
+    boundaries: { tsconfig: 'tsconfig.app.json', srcDirs: ['src'] },
+  };
+
+  it('wraps the config in disableWarnings', () => {
+    const wrapped = updateEslintConfig(CUSTOM_CONFIG, { ...KEPT_ANSWERS, disableWarnings: true });
+    expect(wrapped?.disableWarningsUpdated).toBe(true);
+    expect(wrapped?.code).toMatch(/export default disableWarnings\(\s*\[/);
+    expect(wrapped?.code).toMatch(/import \{[^}]*disableWarnings[^}]*\} from '@uselab\/linting'/);
+    expect(wrapped?.code).toContain('...local,');
+    expect(readEslintConfig(wrapped?.code ?? '')?.disableWarnings).toBe(true);
+  });
+
+  it('unwraps the config from disableWarnings', () => {
+    const wrapped = generateEslintConfig({ presets: ['javascript'], disableWarnings: true });
+    const unwrapped = updateEslintConfig(wrapped, {
+      presets: ['javascript'],
+      disableWarnings: false,
+    });
+    expect(unwrapped?.disableWarningsUpdated).toBe(true);
+    expect(unwrapped?.code).toContain('export default [');
+    expect(unwrapped?.code).not.toContain('disableWarnings');
   });
 
   it('appends after the last uselab entry when no later preset exists', () => {

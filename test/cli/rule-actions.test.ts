@@ -53,7 +53,6 @@ vi.mock('../../src/features/cli/rule-actions-prompt', () => ({
 vi.mock('../../src/features/cli/copilot-notice', () => ({
   confirmCopilotStart: async () => {
     prompts.copilotConfirmed += 1;
-    return false;
   },
 }));
 

@@ -1,5 +1,6 @@
 import { builders, generateCode, parseModule, type ASTNode, type ProxifiedModule } from 'magicast';
 import { ALL_FILES, readGlobalIgnores } from './eslint-config-ignores';
+import { isCallTo, updateDisableWarnings } from './eslint-config-warnings';
 import { queryNeedsUpdate, readQueryOptions } from './eslint-config-query';
 import {
   propertyKey,
@@ -9,6 +10,7 @@ import {
   type PropertyNode,
 } from './eslint-config-literals';
 import {
+  DISABLE_WARNINGS,
   GLOBAL_IGNORES,
   GLOBAL_IGNORES_MODULE,
   GLOBALS_OPTION_KEYS,
@@ -40,10 +42,16 @@ type ParsedConfig = {
   array: ArrayNode;
   /** Local name of `globalIgnores` imported from `eslint/config`, if imported. */
   ignoresLocal?: string;
+  /** Local name of `disableWarnings` imported from `@uselab/linting`, if imported. */
+  disableWarningsLocal?: string;
+  /** Whether the config array is wrapped in `disableWarnings([...])`. */
+  wrapped: boolean;
 };
 
 export type ExistingConfig = {
   presets: PresetId[];
+  /** Whether the config is wrapped in `disableWarnings([...])`. */
+  disableWarnings: boolean;
   javascript?: JavaScriptAnswers;
   /** False when the `javascript()` options aren't plain literals and can't be rewritten. */
   javascriptEditable: boolean;
@@ -79,6 +87,7 @@ export type ConfigUpdate = {
   /** The `browser()` / `node()` entries whose options were rewritten. */
   globalsUpdated: GlobalsPreset[];
   ignoresUpdated: boolean;
+  disableWarningsUpdated: boolean;
 };
 
 /** Finds the config array of `export default [...]` or `export default defineConfig([...])`. */
@@ -106,7 +115,14 @@ const parseConfig = (text: string): ParsedConfig | undefined => {
     const ignoresLocal = mod.imports.$items.find(
       ({ from, imported }) => from === GLOBAL_IGNORES_MODULE && imported === GLOBAL_IGNORES,
     )?.local;
-    return imports.length > 0 && array ? { mod, locals, array, ignoresLocal } : undefined;
+    const disableWarningsLocal = imports.find(
+      ({ imported }) => imported === DISABLE_WARNINGS,
+    )?.local;
+    const root = mod.exports.default.$ast;
+    const wrapped = isCallTo(root, disableWarningsLocal);
+    return imports.length > 0 && array
+      ? { mod, locals, array, ignoresLocal, disableWarningsLocal, wrapped }
+      : undefined;
   } catch {
     return undefined;
   }
@@ -269,6 +285,7 @@ export const readEslintConfig = (text: string): ExistingConfig | undefined => {
   const globals = readGlobalsOptions(presetEntries);
   return {
     presets,
+    disableWarnings: parsed.wrapped,
     ...readJavascriptOptions(presetEntries),
     ...readBoundariesOptions(presetEntries),
     ...readQueryOptions(presetEntries.query),
@@ -524,6 +541,15 @@ export const updateEslintConfig = (
   const globalsUpdated = updateGlobals(parsed, existing, answers);
   addPresets(parsed, added, answers);
   const ignoresUpdated = updateIgnores(parsed, existing, answers);
+  const disableWarningsUpdated = updateDisableWarnings(
+    {
+      mod: parsed.mod,
+      array: parsed.array,
+      local: parsed.disableWarningsLocal,
+      wrapped: parsed.wrapped,
+    },
+    answers.disableWarnings,
+  );
   const changed = [
     added.length > 0,
     removed.length > 0,
@@ -532,6 +558,7 @@ export const updateEslintConfig = (
     queryUpdated,
     globalsUpdated.length > 0,
     ignoresUpdated,
+    disableWarningsUpdated,
   ].includes(true);
   return {
     code: changed ? printUpdated(parsed, ignoresUpdated) : text,
@@ -542,5 +569,6 @@ export const updateEslintConfig = (
     queryUpdated,
     globalsUpdated,
     ignoresUpdated,
+    disableWarningsUpdated,
   };
 };

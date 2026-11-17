@@ -11,6 +11,7 @@ export type NodeOptions = PresetOptions;
  *
  * Node doesn't resolve the `@app` / `@features` / `@support` aliases, so its files may use
  * relative imports: this turns off the `no-restricted-imports` rule of the aliases preset for them.
+ * It also turns off `no-console`, since console output is legitimate in Node.
  * Place it after `aliases`. Layout boundaries are still checked by `boundaries()`.
  */
 export const node = (options: NodeOptions = {}): Config[] => [
@@ -25,5 +26,10 @@ export const node = (options: NodeOptions = {}): Config[] => [
     name: 'uselab/node/relative-imports',
     ...scope(options.files, options.ignores),
     rules: { 'no-restricted-imports': 'off' },
+  },
+  {
+    name: 'uselab/node/console',
+    ...scope(options.files, options.ignores),
+    rules: { 'no-console': 'off' },
   },
 ];
