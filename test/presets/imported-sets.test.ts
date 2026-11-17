@@ -36,6 +36,12 @@ describe('imported rule sets', () => {
     expect(resolved.languageOptions?.globals).toHaveProperty('process');
   });
 
+  it('node preset turns off no-console, except for ignored files', async () => {
+    const config = [...javascriptPreset(), ...nodePreset({ ignores: ['web/**'] })];
+    expect(severityOf(await configForFile(config, 'src/a.js'), 'no-console')).toBe(0);
+    expect(severityOf(await configForFile(config, 'web/a.js'), 'no-console')).toBeGreaterThan(0);
+  });
+
   it('globals: node({ ignores }) skips the ignored files', async () => {
     const config = [...javascriptPreset(), ...nodePreset({ ignores: ['src/**'] })];
     const resolved = await configForFile(config, 'src/a.js');
