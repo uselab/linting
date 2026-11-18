@@ -1,21 +1,12 @@
 import { existsSync, statSync } from 'node:fs';
 import { collectProblems, lintProject } from './analyze';
 
-const DEFAULT_MAX_ERRORS = 50;
-
-type CheckOptions = { withWarnings?: boolean; maxErrors?: number };
+type CheckOptions = { withWarnings?: boolean };
 
 /** The first problem with the arguments, if any. */
-const argumentError = (
-  projectDir: string,
-  ruleId: string | undefined,
-  maxErrors: number,
-): string | undefined => {
+const argumentError = (projectDir: string, ruleId: string | undefined): string | undefined => {
   if (!ruleId) {
-    return 'Usage: uselab-linting check <rule> [dir] [--with-warnings] [--max-errors <n>]';
-  }
-  if (!Number.isInteger(maxErrors) || maxErrors < 1) {
-    return '--max-errors must be a positive integer.';
+    return 'Usage: uselab-linting check <rule> [dir] [--with-warnings]';
   }
   if (!existsSync(projectDir) || !statSync(projectDir).isDirectory()) {
     return `Target directory does not exist: ${projectDir}`;
@@ -23,13 +14,13 @@ const argumentError = (
   return undefined;
 };
 
-/** The `check` command: lists the first `maxErrors` errors of one ESLint rule (and its warnings with `--with-warnings`). Exits with 1 when there are any. */
+/** The `check` command: lists the errors of one ESLint rule (and its warnings with `--with-warnings`). Exits with 1 when there are any. */
 export const runCheckRule = async (
   projectDir: string,
   ruleId: string | undefined,
-  { withWarnings = false, maxErrors = DEFAULT_MAX_ERRORS }: CheckOptions = {},
+  { withWarnings = false }: CheckOptions = {},
 ) => {
-  const error = argumentError(projectDir, ruleId, maxErrors);
+  const error = argumentError(projectDir, ruleId);
   if (error || !ruleId) {
     process.stderr.write(`${error}\n`);
     process.exitCode = 1;
@@ -43,15 +34,11 @@ export const runCheckRule = async (
     process.stdout.write(`No problems for ${ruleId}.\n`);
     return;
   }
-  for (const { file, line, column, message, severity } of problems.slice(0, maxErrors)) {
+  for (const { file, line, column, message, severity } of problems) {
     process.stdout.write(
       `${file}:${line}:${column}  ${severity === 2 ? 'error' : 'warning'}  ${message}\n`,
     );
   }
-  process.stdout.write(
-    problems.length > maxErrors
-      ? `\nOnly first ${maxErrors} errors of ${problems.length} total for ${ruleId}. Use --max-errors <n> to show more.\n`
-      : `\n${problems.length} problem(s) for ${ruleId}.\n`,
-  );
+  process.stdout.write(`\n${problems.length} problem(s) for ${ruleId}.\n`);
   process.exitCode = 1;
 };

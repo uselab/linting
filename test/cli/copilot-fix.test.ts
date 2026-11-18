@@ -155,7 +155,7 @@ describe('runCopilotFix', () => {
     expect(args[0]).toBe('-i');
     expect(args[1]).toContain('no-console');
     expect(args[2]).toMatch(
-      /^--allow-tool="write\(node_modules\/.+\.txt\),write\(src\/a\.ts\),shell\(npx uselab-linting:\*\)"$/u,
+      /^--allow-tool="write\(node_modules\/.+\.txt\),write\(src\/a\.ts\),shell\(npx uselab-linting:\*\),shell\(cd\),shell\(Select-Object\),shell\(Select-String\)"$/u,
     );
     expect(options).toMatchObject({ cwd: dir, stdio: 'inherit' });
   });
