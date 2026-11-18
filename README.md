@@ -23,13 +23,8 @@ Run it in a git repository without uncommitted changes, so you can review and re
 - sets `"type": "module"` in `package.json` and writes `eslint.config.ts` / `.mts` (and `prettier.config.ts` / `.mts`). An existing `@uselab/linting` config is updated in place and custom entries are kept. Remaining CommonJS code is listed in `REFACTOR-COMMON-JS.md`;
 - removes other ESLint, Prettier, Biome, TSLint, XO, oxlint and dprint configs and their packages;
 - updates `devDependencies` and adds the `lint`, `lint:fix`, `lint:analyze` scripts (plus `format`, `format:check` with `prettier` and `typecheck` with `typescript`);
-- adds the [Copilot hook](#github-copilot-hook);
 - with `typescript` in a Vite project, adds `vite-plugin-checker`; with `aliases`, adds the [path aliases](#path-aliases) to the tsconfig and `vite.config.*`; sets `noImplicitAny`;
 - stages the files it creates or renames with git, offers to [commit](#commit-prompts) the setup, and offers to run `npm install` and the [analysis](#analyze).
-
-### GitHub Copilot hook
-
-`.github/hooks/uselab-linting.json` is a `postToolUse` [hook](https://docs.github.com/en/copilot/reference/hooks-reference) for Copilot CLI and Copilot in the cloud. After every file edit by the agent it runs `npx --no uselab-linting copilot-hook`, which formats the edited files with Prettier, runs `eslint --fix`, and reports `uselab-linting: ok` or the remaining errors. Install the dependencies in `copilot-setup-steps.yml` for Copilot in the cloud.
 
 ### Analyze
 

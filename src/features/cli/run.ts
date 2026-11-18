@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import * as clack from '@clack/prompts';
 import {
@@ -15,12 +15,6 @@ import {
   REFACTOR_REPORT_FILE,
   reportWrittenMessage,
 } from './commonjs';
-import {
-  COPILOT_HOOK_FILE,
-  copilotHookConfig,
-  findRepositoryRoot,
-  runCopilotHook,
-} from './copilot-hook';
 import {
   checkDependencies,
   installCommand,
@@ -77,7 +71,6 @@ import { ownVersion } from './own-version';
 export const USAGE = `Usage: uselab-linting init [dir]
        uselab-linting analyze [dir]
        uselab-linting               check <rule> [dir] [--with-warnings]
-       uselab-linting copilot-hook
 
 Sets up @uselab/linting in a project. Detects the framework to preselect presets, replaces any
 existing lint/format tooling and applies the setup without further questions. Finally it offers to
@@ -89,9 +82,7 @@ be inside a git repository without uncommitted changes.
                  code examples; offers to disable rules or ignore them with comments, and to
                  write LINT-ANALYSIS.md
   check          Lints the project and lists only the errors of one rule (exit 1 when any);
-                 --with-warnings includes the warnings
-  copilot-hook   GitHub Copilot postToolUse hook: formats and lint-fixes the edited files
-                 (JSON payload on stdin) and reports the remaining errors to the agent`;
+                 --with-warnings includes the warnings`;
 
 type ProjectPackage = { text: string; data: PackageJson & Record<string, unknown> };
 
@@ -381,17 +372,6 @@ const updateImplicitAny = async (projectDir: string, answers: InitAnswers): Prom
   }
 };
 
-/** Writes the Copilot hook to the repository root, running in the project directory. */
-const writeCopilotHook = (tracked: TrackedFiles): void => {
-  const { projectDir } = tracked;
-  const root = findRepositoryRoot(projectDir);
-  const cwd = path.relative(root, projectDir).split(path.sep).join('/');
-  const file = path.join(root, COPILOT_HOOK_FILE);
-  mkdirSync(path.dirname(file), { recursive: true });
-  tracked.write(file, copilotHookConfig(cwd || undefined));
-  clack.log.success(`Wrote ${path.relative(projectDir, file).split(path.sep).join('/')}.`);
-};
-
 const printNextSteps = (projectDir: string, install: string | undefined): void => {
   const hasLintScript = readPackageJson(projectDir)?.data.scripts?.lint !== undefined;
   const steps = [install, hasLintScript ? 'npm run lint' : 'npx eslint .'].filter(
@@ -433,9 +413,6 @@ const init = async (projectDir: string): Promise<void> => {
   const finishChanges = commits.begin();
 
   const updatedProject = await updateModuleType(projectDir, project);
-  const copilotHook = await confirm(
-    'Add a GitHub Copilot hook that formats and lint-fixes files after the agent edits them?',
-  );
   const isModule = isModulePackage(updatedProject?.data);
   const files: ConfigFiles = {
     eslint: eslintConfigFile(isModule),
@@ -467,9 +444,6 @@ const init = async (projectDir: string): Promise<void> => {
   });
   const dependencies = updateDependencies(projectDir, requirements, readPackageJson(projectDir));
   updateScripts(projectDir, answers, readPackageJson(projectDir));
-  if (copilotHook) {
-    writeCopilotHook(tracked);
-  }
   tracked.stage();
   await finishChanges('Set up @uselab/linting');
   const install = installStep(dependencies, report.dependencies.length > 0);
@@ -523,8 +497,6 @@ export const run = async (argv: string[]): Promise<void> => {
   const [command] = argv;
   if (isHelp(command)) {
     process.stdout.write(`${USAGE}\n`);
-  } else if (command === 'copilot-hook') {
-    await runCopilotHook();
   } else if (command === undefined && isInteractive()) {
     await runInit(undefined);
   } else if (command !== undefined && Object.hasOwn(COMMANDS, command)) {
