@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import * as clack from '@clack/prompts';
 import {
@@ -15,12 +15,6 @@ import {
   REFACTOR_REPORT_FILE,
   reportWrittenMessage,
 } from './commonjs';
-import {
-  COPILOT_HOOK_FILE,
-  copilotHookConfig,
-  findRepositoryRoot,
-  runCopilotHook,
-} from './copilot-hook';
 import {
   checkDependencies,
   installCommand,
@@ -76,8 +70,7 @@ import { ownVersion } from './own-version';
 
 export const USAGE = `Usage: uselab-linting init [dir]
        uselab-linting analyze [dir]
-       uselab-linting        check <rule> [dir] [--with-warnings] [--max-errors <n>]
-       uselab-linting copilot-hook
+       uselab-linting               check <rule> [dir] [--with-warnings]
 
 Sets up @uselab/linting in a project. Detects the framework to preselect presets, replaces any
 existing lint/format tooling and applies the setup without further questions. Finally it offers to
@@ -89,10 +82,7 @@ be inside a git repository without uncommitted changes.
                  code examples; offers to disable rules or ignore them with comments, and to
                  write LINT-ANALYSIS.md
   check          Lints the project and lists only the errors of one rule (exit 1 when any);
-                 --with-warnings includes the warnings; --max-errors <n> limits the number
-                 of listed problems (default 50)
-  copilot-hook   GitHub Copilot postToolUse hook: formats and lint-fixes the edited files
-                 (JSON payload on stdin) and reports the remaining errors to the agent`;
+                 --with-warnings includes the warnings`;
 
 type ProjectPackage = { text: string; data: PackageJson & Record<string, unknown> };
 
@@ -382,17 +372,6 @@ const updateImplicitAny = async (projectDir: string, answers: InitAnswers): Prom
   }
 };
 
-/** Writes the Copilot hook to the repository root, running in the project directory. */
-const writeCopilotHook = (tracked: TrackedFiles): void => {
-  const { projectDir } = tracked;
-  const root = findRepositoryRoot(projectDir);
-  const cwd = path.relative(root, projectDir).split(path.sep).join('/');
-  const file = path.join(root, COPILOT_HOOK_FILE);
-  mkdirSync(path.dirname(file), { recursive: true });
-  tracked.write(file, copilotHookConfig(cwd || undefined));
-  clack.log.success(`Wrote ${path.relative(projectDir, file).split(path.sep).join('/')}.`);
-};
-
 const printNextSteps = (projectDir: string, install: string | undefined): void => {
   const hasLintScript = readPackageJson(projectDir)?.data.scripts?.lint !== undefined;
   const steps = [install, hasLintScript ? 'npm run lint' : 'npx eslint .'].filter(
@@ -434,9 +413,6 @@ const init = async (projectDir: string): Promise<void> => {
   const finishChanges = commits.begin();
 
   const updatedProject = await updateModuleType(projectDir, project);
-  const copilotHook = await confirm(
-    'Add a GitHub Copilot hook that formats and lint-fixes files after the agent edits them?',
-  );
   const isModule = isModulePackage(updatedProject?.data);
   const files: ConfigFiles = {
     eslint: eslintConfigFile(isModule),
@@ -468,9 +444,6 @@ const init = async (projectDir: string): Promise<void> => {
   });
   const dependencies = updateDependencies(projectDir, requirements, readPackageJson(projectDir));
   updateScripts(projectDir, answers, readPackageJson(projectDir));
-  if (copilotHook) {
-    writeCopilotHook(tracked);
-  }
   tracked.stage();
   await finishChanges('Set up @uselab/linting');
   const install = installStep(dependencies, report.dependencies.length > 0);
@@ -501,29 +474,8 @@ const runInit = async (dir: string | undefined): Promise<void> => {
 const isHelp = (command: string | undefined): boolean =>
   command === '--help' || command === '-h' || command === 'help';
 
-const MAX_ERRORS_OPTION = '--max-errors';
-
-/** The arguments that are neither options nor the value of `--max-errors <n>`. */
-const positionals = (argv: string[]): string[] =>
-  argv.filter((arg, index) => !arg.startsWith('--') && argv[index - 1] !== MAX_ERRORS_OPTION);
-
-/** Reads `--max-errors <n>` or `--max-errors=<n>`; undefined when absent, NaN when invalid. */
-export const parseMaxErrors = (argv: string[]): number | undefined => {
-  const index = argv.findIndex(
-    (arg) => arg === MAX_ERRORS_OPTION || arg.startsWith(`${MAX_ERRORS_OPTION}=`),
-  );
-  if (index === -1) {
-    return undefined;
-  }
-  const arg = argv[index];
-  if (arg === undefined) {
-    return undefined;
-  }
-  const value = arg.startsWith(`${MAX_ERRORS_OPTION}=`)
-    ? arg.slice(MAX_ERRORS_OPTION.length + 1)
-    : argv[index + 1];
-  return value !== undefined && /^[1-9]\d*$/.test(value) ? Number(value) : Number.NaN;
-};
+/** The arguments that are not options. */
+const positionals = (argv: string[]): string[] => argv.filter((arg) => !arg.startsWith('--'));
 
 /** The commands that take a project directory, by name. */
 const COMMANDS: Record<string, (argv: string[]) => Promise<void>> = {
@@ -532,7 +484,6 @@ const COMMANDS: Record<string, (argv: string[]) => Promise<void>> = {
     const [, rule, dir] = positionals(argv);
     return runCheckRule(path.resolve(dir ?? process.cwd()), rule, {
       withWarnings: argv.includes('--with-warnings'),
-      maxErrors: parseMaxErrors(argv),
     });
   },
   analyze: (argv) => {
@@ -546,8 +497,6 @@ export const run = async (argv: string[]): Promise<void> => {
   const [command] = argv;
   if (isHelp(command)) {
     process.stdout.write(`${USAGE}\n`);
-  } else if (command === 'copilot-hook') {
-    await runCopilotHook();
   } else if (command === undefined && isInteractive()) {
     await runInit(undefined);
   } else if (command !== undefined && Object.hasOwn(COMMANDS, command)) {

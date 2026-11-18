@@ -235,7 +235,6 @@ describe('run init', () => {
     const changes = findUncommittedChanges(dir);
     expect(changes).toEqual(
       expect.arrayContaining([
-        'A  .github/hooks/uselab-linting.json',
         'A  eslint.config.ts',
         'A  prettier.config.ts',
         ' M package.json',
@@ -403,7 +402,7 @@ describe('run init', () => {
 
     await commitAndInit(dir);
 
-    expect(answers.confirmDefaults).toEqual([true, true]);
+    expect(answers.confirmDefaults).toEqual([true]);
     expect(JSON.parse(read('package.json')).type).toBe('module');
     expect(existsSync(path.join(dir, 'REFACTOR-COMMON-JS.md'))).toBe(false);
   });
@@ -420,7 +419,7 @@ describe('run init', () => {
 
     await commitAndInit(dir);
 
-    expect(answers.confirmDefaults).toEqual([true, true]);
+    expect(answers.confirmDefaults).toEqual([true]);
     const packageJson = JSON.parse(read('package.json'));
     const keys = Object.keys(packageJson);
     expect(keys[keys.indexOf('name') + 1]).toBe('type');
@@ -448,37 +447,9 @@ describe('run init', () => {
 
     await commitAndInit(dir);
 
-    expect(answers.confirmDefaults).toEqual([false, true]);
+    expect(answers.confirmDefaults).toEqual([false]);
     expect(JSON.parse(read('package.json')).type).toBeUndefined();
     expect(existsSync(path.join(dir, 'REFACTOR-COMMON-JS.md'))).toBe(false);
-    expect(existsSync(path.join(dir, '.github', 'hooks', 'uselab-linting.json'))).toBe(false);
-  });
-
-  it('writes the Copilot hook to the repository root, running in the project directory', async () => {
-    writeFileSync(path.join(dir, 'package.json'), '{ "name": "app", "type": "module" }');
-    const projectDir = path.join(dir, 'packages', 'web');
-    mkdirSync(projectDir, { recursive: true });
-    writeFileSync(path.join(projectDir, 'package.json'), '{ "name": "web", "type": "module" }');
-    answers.presets = ['javascript'];
-    answers.confirm = true;
-
-    await commitAndInit(projectDir);
-
-    expect(answers.confirmDefaults).toEqual([true]);
-    expect(JSON.parse(read('.github/hooks/uselab-linting.json'))).toEqual({
-      version: 1,
-      hooks: {
-        postToolUse: [
-          {
-            type: 'command',
-            matcher: 'edit|create|apply_patch|str_replace_editor',
-            command: 'npx --no uselab-linting copilot-hook',
-            cwd: 'packages/web',
-            timeoutSec: 60,
-          },
-        ],
-      },
-    });
   });
 
   it('fails for a missing target directory', async () => {
