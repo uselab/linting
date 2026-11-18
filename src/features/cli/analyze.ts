@@ -181,10 +181,15 @@ const rankKey = (rule: RuleSummary): number[] => [
 ];
 
 /**
- * Orders rules by relevance: errors without an autofix, then warnings without an autofix, then
- * auto-fixable errors, then auto-fixable warnings (all by count), then by rule id.
+ * Orders rules by relevance: boundary rules always first, then errors without an autofix, then
+ * warnings without an autofix, then auto-fixable errors, then auto-fixable warnings (all by
+ * count), then by rule id.
  */
 export const compareRules = (a: RuleSummary, b: RuleSummary): number => {
+  const boundary = Number(isBoundaryRule(b.ruleId)) - Number(isBoundaryRule(a.ruleId));
+  if (boundary !== 0) {
+    return boundary;
+  }
   const keyA = rankKey(a);
   const keyB = rankKey(b);
   const difference = keyA.map((value, index) => (keyB[index] ?? 0) - value).find((d) => d !== 0);

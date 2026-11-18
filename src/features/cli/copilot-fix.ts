@@ -3,8 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import * as clack from '@clack/prompts';
-import promptTemplate from './copilot-fix-prompt.json';
-import ruleInstructions from './copilot-rule-instructions.json';
+import copilotFix from './copilot-fix.json';
 
 const SAFE_RULE_ID = /^[\w@/.-]+$/u;
 /** Paths that can be put in the quoted `--allow-tool` value without escaping. */
@@ -33,9 +32,9 @@ export const isCopilotAvailable = (): boolean =>
 
 const INSTRUCTIONS_PLACEHOLDER = '{ruleInstructions}';
 
-/** The rule-specific instructions from `copilot-rule-instructions.json`, if the rule has any. */
+/** The rule-specific instructions from `copilot-fix.json`, if the rule has any. */
 const instructionsFor = (ruleId: string): string | undefined => {
-  const rules: Record<string, string[]> = ruleInstructions.rules;
+  const rules: Record<string, string[]> = copilotFix.rules;
   const lines = Object.hasOwn(rules, ruleId) ? rules[ruleId] : undefined;
   return lines && lines.length > 0
     ? `Specific guidance for this rule: ${lines.join(' ')}`
@@ -56,9 +55,9 @@ export const sanitizeInstructions = (text: string): string =>
 
 /**
  * The prompt for Copilot: fix only the problems of one rule, without shortcuts. The text is in
- * `copilot-fix-prompt.json`; `{ruleId}` and `{messageFile}` are interpolated, and
- * `{ruleInstructions}` is replaced by the rule's entry in `copilot-rule-instructions.json`
- * (the line is dropped without one). The problems themselves come from the `check` command.
+ * `copilot-fix.json`; `{ruleId}` and `{messageFile}` are interpolated, and
+ * `{ruleInstructions}` is replaced by the rule's entry in its `rules` (the line is dropped
+ * without one). The problems themselves come from the `check` command.
  * `userInstructions` (already sanitized) are added at the end.
  */
 export const copilotFixPrompt = (
@@ -67,7 +66,7 @@ export const copilotFixPrompt = (
   userInstructions?: string,
 ): string => {
   const extra = instructionsFor(ruleId);
-  const prompt = promptTemplate.lines
+  const prompt = copilotFix.prompt
     .filter((line) => extra !== undefined || line !== INSTRUCTIONS_PLACEHOLDER)
     .map((line) => (line === INSTRUCTIONS_PLACEHOLDER ? (extra ?? '') : line))
     .join(' ')

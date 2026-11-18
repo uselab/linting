@@ -180,6 +180,18 @@ describe('summarizeRules', () => {
       ],
     });
   });
+
+  it('puts boundary rules first, whatever their count', () => {
+    const rules = summarizeRules(
+      [
+        problem({ ruleId: 'errors' }),
+        problem({ ruleId: 'errors' }),
+        problem({ ruleId: 'boundaries/dependencies', severity: 1, fixable: true }),
+      ],
+      readSource,
+    );
+    expect(rules.map(({ ruleId }) => ruleId)).toEqual(['boundaries/dependencies', 'errors']);
+  });
 });
 
 describe('analyzeProblems', () => {

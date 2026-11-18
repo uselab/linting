@@ -23,8 +23,8 @@ const {
   runCopilotFix,
   sanitizeInstructions,
 } = await import('../../src/features/cli/copilot-fix');
-const { default: ruleInstructions } =
-  await import('../../src/features/cli/copilot-rule-instructions.json');
+const { default: copilotFix } = await import('../../src/features/cli/copilot-fix.json');
+const ruleInstructions = copilotFix;
 
 describe('copilotFixPrompt', () => {
   const prompt = copilotFixPrompt('@typescript-eslint/no-explicit-any', 'tmp/message.txt');
@@ -87,7 +87,7 @@ describe('sanitizeInstructions', () => {
   });
 });
 
-describe('copilot-rule-instructions.json', () => {
+describe('copilot-fix.json rules', () => {
   it.each(Object.entries(ruleInstructions.rules))('is shell-safe for %s', (ruleId, lines) => {
     expect(ruleId).toMatch(/^[\w@/.-]+$/u);
     expect(lines.length).toBeGreaterThan(0);
