@@ -4,7 +4,7 @@ import * as clack from '@clack/prompts';
 import type { Problem } from './analyze';
 import { disabledCommitOffer, type CommitOffer } from './commit-offer';
 import { runCopilotFix } from './copilot-fix';
-import { confirmCopilotStart } from './copilot-notice';
+import { confirmCopilotStart, type CopilotMode } from './copilot-notice';
 import { findEslintConfigFile, writeDisabledRules } from './disable-rules';
 import { readEslintConfig, updateEslintIgnores } from './eslint-config';
 import { ignoreProblems } from './ignore-comments';
@@ -76,7 +76,13 @@ export type RuleOutcome = 'changed' | 'skipped' | 'finished';
 
 type ChangeAction = Exclude<RuleAction, 'skip' | 'finish'>;
 type Step = [summary: string | (() => string), change: () => Promise<boolean> | boolean];
-type StepContext = { ruleId: string; problems: Problem[]; instructions?: string };
+type StepContext = {
+  ruleId: string;
+  problems: Problem[];
+  instructions?: string;
+  mode?: CopilotMode;
+  model?: string;
+};
 
 /** The files with problems of the rule. */
 const ruleFiles = (ruleId: string, problems: Problem[]): string[] => [
@@ -84,7 +90,10 @@ const ruleFiles = (ruleId: string, problems: Problem[]): string[] => [
 ];
 
 /** Fixes the rule with Copilot; its commit message becomes the default commit message. */
-const copilotStep = (projectDir: string, { ruleId, problems, instructions }: StepContext): Step => {
+const copilotStep = (
+  projectDir: string,
+  { ruleId, problems, instructions, mode, model }: StepContext,
+): Step => {
   let message: string | undefined;
   return [
     () => message ?? `Fixed ${ruleId} with Copilot`,
@@ -92,6 +101,9 @@ const copilotStep = (projectDir: string, { ruleId, problems, instructions }: Ste
       const result = runCopilotFix(projectDir, ruleId, {
         files: ruleFiles(ruleId, problems),
         instructions,
+        mode,
+        model,
+        problems: problems.filter((problem) => problem.ruleId === ruleId),
       });
       message = result.message;
       return result.ok;
@@ -125,19 +137,20 @@ const asksAgain = (action: ChangeAction, declined: boolean): boolean =>
   declined || action === 'editIgnores';
 
 /**
- * Whether the action may start, with the extra Copilot instructions if given. Copilot needs a
- * clean tree first and the user's consent.
+ * Whether the action may start, with the (edited) Copilot instructions and mode if given. Copilot
+ * needs a clean tree first and the user's consent.
  */
 const mayStart = async (
   action: ChangeAction,
+  ruleId: string,
   commits: CommitOffer,
-): Promise<{ start: boolean; instructions?: string }> => {
+): Promise<{ start: boolean; instructions?: string; mode?: CopilotMode; model?: string }> => {
   if (action !== 'copilot') {
     return { start: true };
   }
   await commits.ensureClean();
-  const confirmed = await confirmCopilotStart();
-  return { start: confirmed !== undefined, instructions: confirmed?.instructions };
+  const confirmed = await confirmCopilotStart(ruleId);
+  return { start: confirmed !== undefined, ...confirmed };
 };
 
 /**
@@ -155,12 +168,18 @@ export const applyRuleAction = async (
     if (action === 'skip' || action === 'finish') {
       return action === 'skip' ? 'skipped' : 'finished';
     }
-    const { start, instructions } = await mayStart(action, commits);
+    const { start, instructions, mode, model } = await mayStart(action, choice.ruleId, commits);
     const declined = !start;
     const changed =
       !declined &&
       (await commits.step(
-        ...stepFor(action, projectDir, { ruleId: choice.ruleId, problems, instructions }),
+        ...stepFor(action, projectDir, {
+          ruleId: choice.ruleId,
+          problems,
+          instructions,
+          mode,
+          model,
+        }),
       ));
     if (changed) {
       return 'changed';

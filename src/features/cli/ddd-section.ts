@@ -1,8 +1,11 @@
-/** The rules that report violations of the project structure (boundaries preset). */
+/**
+ * The rules that report violations of the project structure (boundaries preset), in the order they
+ * are fixed: placement first, then imports, then the remaining dependency violations.
+ */
 export const BOUNDARY_RULES: readonly string[] = [
-  'boundaries/dependencies',
   'uselab-layout/file-location',
   'uselab-layout/import-location',
+  'boundaries/dependencies',
 ];
 
 export const DDD_SECTION_HEADING = 'Project structure (DDD)';

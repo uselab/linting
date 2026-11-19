@@ -1,4 +1,4 @@
-import * as clack from '@clack/prompts';
+import * as ask from './ask';
 
 /** What to do with the problems of a rule. */
 export type RuleAction = 'copilot' | 'disable' | 'ignore' | 'editIgnores' | 'skip' | 'finish';
@@ -15,7 +15,6 @@ export const EDIT_IGNORES_EXPLANATION =
   "Files linted that shouldn't be, or missed that should be? Edit that here.";
 
 const options = (ruleId: string): { value: RuleAction; label: string; hint: string }[] => [
-  { value: 'skip', label: 'Skip this rule', hint: 'I will fix this myself' },
   {
     value: 'copilot',
     label: 'Fix with Copilot',
@@ -28,14 +27,15 @@ const options = (ruleId: string): { value: RuleAction; label: string; hint: stri
   },
   { value: 'disable', label: `Disable ${ruleId}`, hint: 'turn it off in the ESLint config' },
   { value: 'editIgnores', label: EDIT_IGNORES_LABEL, hint: EDIT_IGNORES_EXPLANATION },
+  { value: 'skip', label: 'Skip this rule', hint: 'I will fix this myself' },
 ];
 
 /** Asks what to do with a single rule; esc finishes, to continue to the report. */
 export const askRuleAction = async ({ ruleId, hint }: RuleChoice): Promise<RuleAction> => {
-  const action = await clack.select<RuleAction>({
+  const action = await ask.select<RuleAction>({
     message: `${ruleId} (${hint}): what to do?`,
     options: options(ruleId),
-    initialValue: 'skip',
+    initialValue: 'copilot',
   });
-  return clack.isCancel(action) ? 'finish' : action;
+  return typeof action === 'symbol' ? 'finish' : action;
 };

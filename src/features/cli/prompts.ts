@@ -9,6 +9,7 @@ import {
   type QueryLibraryId,
 } from '../../support/query-libraries';
 import { hasNestedSrcDirs, NESTED_SRC_DIRS_MESSAGE } from '../../support/source-tsconfig';
+import * as ask from './ask';
 import { excludeTestSrcDirs } from './detect';
 import {
   environmentPresets,
@@ -167,7 +168,7 @@ const askEnvironment = async (
   initialBrowserFiles: readonly string[],
 ): Promise<EnvironmentAnswers> => {
   const type = unwrap(
-    await clack.select<ProjectType>({
+    await ask.select<ProjectType>({
       message: 'Is this a browser or a Node project?',
       options: PROJECT_TYPE_OPTIONS,
       initialValue: initialType,
@@ -178,7 +179,7 @@ const askEnvironment = async (
   }
   const browserFiles = splitGlobs(
     unwrap(
-      await clack.text({
+      await ask.text({
         message:
           'Browser files: globs that get browser globals (comma separated; other files are Node)',
         placeholder: 'src/**',
@@ -214,7 +215,7 @@ const askQuery = async (
     libraries.some((library) => library.id === id),
   );
   const library = unwrap(
-    await clack.select<QueryLibraryId | typeof NO_QUERY>({
+    await ask.select<QueryLibraryId | typeof NO_QUERY>({
       message: 'Which library handles server state? (no fetch / axios outside src/support/http)',
       options: [
         { value: NO_QUERY, label: "None (don't enforce this rule)" },
@@ -236,7 +237,7 @@ const askJavascript = async (
 ): Promise<JavaScriptAnswers> => {
   const testFiles = splitGlobs(
     unwrap(
-      await clack.text({
+      await ask.text({
         message:
           'Test files: globs of files with relaxed rules (comma separated, empty = no test files)',
         initialValue: (initial?.testFiles ?? detectedTestFiles).join(', '),
@@ -254,7 +255,7 @@ const askBoundaries = async (
 ): Promise<BoundariesAnswers> => {
   const srcDirs = splitList(
     unwrap(
-      await clack.text({
+      await ask.text({
         message:
           'Project structure (DDD): src folders with the app / features / support layout (comma separated)',
         initialValue: (initial?.srcDirs ?? excludeTestSrcDirs(defaults.srcDirs, testFiles)).join(
@@ -267,7 +268,7 @@ const askBoundaries = async (
   const detected = defaults.tsconfigsFor(srcDirs);
   const tsconfig = splitList(
     unwrap(
-      await clack.text({
+      await ask.text({
         message:
           'Project structure (DDD): tsconfig(s) that include these src folders, used to resolve imports (comma separated, empty = auto-detect)',
         placeholder: 'tsconfig.app.json',
@@ -336,7 +337,7 @@ const askIgnoreGlobs = async (
     initial?.mode === mode ? initial.globs : mode === 'only' ? DEFAULT_OPT_IN_GLOBS : [];
   return splitGlobs(
     unwrap(
-      await clack.text({
+      await ask.text({
         message:
           mode === 'only' ? `${OPT_IN_MESSAGE})` : 'Globs of the files to skip (comma separated)',
         placeholder: mode === 'only' ? 'src/**, test/**, !src/legacy/**' : 'legacy/**, src/old/**',
@@ -350,7 +351,7 @@ const askIgnoreGlobs = async (
 /** Asks which files ESLint lints: all, all except some globs (opt-out) or only some (opt-in). */
 const askIgnores = async (initial: IgnoresAnswers | undefined): Promise<IgnoresAnswers> => {
   const mode = unwrap(
-    await clack.select<IgnoresMode>({
+    await ask.select<IgnoresMode>({
       message: `Which files should ESLint lint? (${DEFAULT_IGNORES_MESSAGE})`,
       options: IGNORES_OPTIONS,
       initialValue: initial?.mode ?? 'all',
@@ -381,7 +382,7 @@ export const askScopeGlobs = async (
   const relative = relativeTo === undefined ? '' : `, relative to ${relativeTo}`;
   const globs = splitGlobs(
     unwrap(
-      await clack.text({
+      await ask.text({
         message: optIn
           ? `${OPT_IN_MESSAGE}${relative})`
           : `Globs of the files to skip (comma separated${relative}; empty lints all files)`,
@@ -454,7 +455,7 @@ const askSelection = async (
     ({ value }) => !(projectType === 'node' && value === 'aliases'),
   );
   const answered = unwrap(
-    await clack.multiselect<SelectValue>({
+    await ask.multiselect<SelectValue>({
       message: 'Which presets do you want?',
       options: withVisibleHints(options),
       initialValues: [
@@ -524,4 +525,4 @@ export const confirm = async (
   message: string,
   initialValue = true,
   labels: { active?: string; inactive?: string } = {},
-): Promise<boolean> => unwrap(await clack.confirm({ message, initialValue, ...labels }));
+): Promise<boolean> => unwrap(await ask.confirm({ message, initialValue, ...labels }));

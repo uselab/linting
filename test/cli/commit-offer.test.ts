@@ -14,14 +14,17 @@ const prompts = vi.hoisted(
   } => ({ multilines: [], confirms: [], asked: [], confirmed: [], cancelled: [] }),
 );
 
-vi.mock('@clack/prompts', () => ({
-  isCancel: () => false,
-  cancel: (message: string) => prompts.cancelled.push(message),
-  log: { success: () => {}, warn: () => {}, info: () => {} },
+vi.mock('../../src/features/cli/multiline', () => ({
   multiline: async (options: (typeof prompts.asked)[number]) => {
     prompts.asked.push(options);
     return prompts.multilines.shift() ?? options.initialValue;
   },
+}));
+
+vi.mock('@clack/prompts', () => ({
+  isCancel: () => false,
+  cancel: (message: string) => prompts.cancelled.push(message),
+  log: { success: () => {}, warn: () => {}, info: () => {} },
   confirm: async ({ message }: { message: string }) => {
     prompts.confirmed.push(message);
     return prompts.confirms.shift() ?? true;
