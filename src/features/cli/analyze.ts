@@ -3,7 +3,7 @@ import path from 'node:path';
 import { styleText } from 'node:util';
 import * as clack from '@clack/prompts';
 import type { ESLint, Linter } from 'eslint';
-import { DDD_REFERENCE, dddSectionLines, isBoundaryRule } from './ddd-section';
+import { BOUNDARY_RULES, DDD_REFERENCE, dddSectionLines, isBoundaryRule } from './ddd-section';
 import { createCommitOffer, type CommitOffer } from './commit-offer';
 import { ownVersion } from './own-version';
 import { confirm } from './prompts';
@@ -180,11 +180,21 @@ const rankKey = (rule: RuleSummary): number[] => [
   rule.fixableWarnings,
 ];
 
+const boundaryOrder = (ruleId: string): number => {
+  const index = BOUNDARY_RULES.indexOf(ruleId);
+  return index === -1 ? BOUNDARY_RULES.length : index;
+};
+
 /**
- * Orders rules by relevance: errors without an autofix, then warnings without an autofix, then
- * auto-fixable errors, then auto-fixable warnings (all by count), then by rule id.
+ * Orders rules by relevance: boundary rules always first, in the fixed order of BOUNDARY_RULES,
+ * then errors without an autofix, then warnings without an autofix, then auto-fixable errors,
+ * then auto-fixable warnings (all by count), then by rule id.
  */
 export const compareRules = (a: RuleSummary, b: RuleSummary): number => {
+  const boundary = boundaryOrder(a.ruleId) - boundaryOrder(b.ruleId);
+  if (boundary !== 0) {
+    return boundary;
+  }
   const keyA = rankKey(a);
   const keyB = rankKey(b);
   const difference = keyA.map((value, index) => (keyB[index] ?? 0) - value).find((d) => d !== 0);

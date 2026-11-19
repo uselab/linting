@@ -2,6 +2,7 @@ import { styleText } from 'node:util';
 import * as clack from '@clack/prompts';
 import { findUncommittedChanges, gitCommit, gitSnapshot, isGitRepository } from './git';
 import { confirm, unwrap } from './prompts';
+import { multiline } from './multiline';
 
 /** Offers to commit the changes the CLI makes, and requires a clean working tree before the first. */
 export type CommitOffer = {
@@ -19,7 +20,6 @@ export type CommitOffer = {
 };
 
 const COMMIT_MESSAGE = 'Commit message';
-const SUBMIT_HINT = styleText('dim', '(multiline: press Enter twice to submit)');
 const REQUIRED_MESSAGE = 'Enter a commit message.';
 
 const messageLines = (text: string): string[] =>
@@ -43,8 +43,8 @@ const sameSnapshot = (before: Map<string, string>, after: Map<string, string>): 
 /** Requires the user to commit the existing changes; exits when they decline or it fails. */
 const commitExistingChanges = async (projectDir: string): Promise<void> => {
   const message = (): Promise<string | symbol> =>
-    clack.multiline({
-      message: `${COMMIT_MESSAGE} (required) ${SUBMIT_HINT}`,
+    multiline({
+      message: `${COMMIT_MESSAGE} (required)`,
       validate: requireMessage,
     });
   const accepted = await confirm(
@@ -108,8 +108,8 @@ export const createCommitOffer = (
       })
     ) {
       const text = unwrap(
-        await clack.multiline({
-          message: `${COMMIT_MESSAGE} ${SUBMIT_HINT}`,
+        await multiline({
+          message: COMMIT_MESSAGE,
           initialValue: defaultMessage,
           validate: requireMessage,
         }),
