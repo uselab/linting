@@ -92,11 +92,11 @@ describe('confirmCopilotStart', () => {
 
   it('appends previously used models to the defaults and remembers new ones', async () => {
     prompts.texts = ['x', 'x'];
-    prompts.answers = ['interactive', 'other', 'm-two', 'interactive', 'default'];
+    prompts.answers = ['interactive', 'other', 'm-two', 'interactive', 'auto'];
     await confirmCopilotStart('no-console');
     expect(JSON.parse(files.content ?? '[]')).toEqual(['m-two']);
     await confirmCopilotStart('no-console');
-    expect(prompts.optionValues[4]).toEqual(['default', ...defaultModels(), 'm-two', 'other']);
+    expect(prompts.optionValues[4]).toEqual([...defaultModels(), 'm-two', 'other']);
   });
 
   it('does not repeat a default model and ignores invalid saved content', async () => {
@@ -104,7 +104,7 @@ describe('confirmCopilotStart', () => {
     prompts.texts = ['x'];
     prompts.answers = ['interactive', 'auto'];
     await confirmCopilotStart('no-console');
-    expect(prompts.optionValues[1]).toEqual(['default', ...defaultModels(), 'm-one', 'other']);
+    expect(prompts.optionValues[1]).toEqual([...defaultModels(), 'm-one', 'other']);
     expect(JSON.parse(files.content)).toEqual(['auto', 'm-one']);
   });
 
@@ -112,21 +112,30 @@ describe('confirmCopilotStart', () => {
     prompts.texts = ['x'];
     prompts.answers = ['interactive', 'other', 'm-two'];
     expect(await confirmCopilotStart('no-console')).toMatchObject({ model: 'm-two' });
-    expect(prompts.optionValues[1]).toEqual(['default', ...defaultModels(), 'other']);
+    expect(prompts.optionValues[1]).toEqual([...defaultModels(), 'other']);
     expect(prompts.optionValues[2]).toEqual(['m-one', 'm-two', 'custom']);
   });
 
   it('preselects the mode configured for the rule, interactive otherwise', async () => {
     prompts.texts = ['text', 'text'];
-    prompts.answers = ['plan', 'default', 'interactive', 'default'];
+    prompts.answers = ['plan', 'auto', 'interactive', 'auto'];
     await confirmCopilotStart('boundaries/dependencies');
     await confirmCopilotStart('no-console');
-    expect(prompts.modeDefaults).toEqual(['plan', 'default', 'interactive', 'default']);
+    expect(prompts.modeDefaults).toEqual(['plan', 'auto', 'interactive', 'auto']);
+  });
+
+  it('preselects the last used model, the first default model otherwise', async () => {
+    prompts.texts = ['x', 'x'];
+    prompts.answers = ['interactive', 'other', 'm-two', 'interactive', 'auto'];
+    await confirmCopilotStart('no-console');
+    await confirmCopilotStart('no-console');
+    expect(prompts.modeDefaults[1]).toBe(defaultModels()[0]);
+    expect(prompts.modeDefaults[4]).toBe('m-two');
   });
 
   it('explains how to exit and offers the default instructions to edit', async () => {
     prompts.texts = [defaultInstructions('no-console')];
-    prompts.answers = ['plan', 'default'];
+    prompts.answers = ['plan', 'auto'];
     const start = await confirmCopilotStart('no-console');
     expect(start?.mode).toBe('plan');
     expect(start?.instructions).toContain('Fix only the ESLint problems of the rule no-console');
@@ -139,19 +148,9 @@ describe('confirmCopilotStart', () => {
     expect(prompts.warnings).toEqual([]);
   });
 
-  it('returns no model for the default, a configured model, or a typed name', async () => {
-    prompts.texts = ['x', 'x', 'x'];
-    prompts.answers = [
-      'interactive',
-      'default',
-      'interactive',
-      'auto',
-      'interactive',
-      'other',
-      'custom',
-      ' gpt-5.6-sol ',
-    ];
-    expect(await confirmCopilotStart('no-console')).not.toHaveProperty('model');
+  it('returns a configured model or a typed name', async () => {
+    prompts.texts = ['x', 'x'];
+    prompts.answers = ['interactive', 'auto', 'interactive', 'other', 'custom', ' gpt-5.6-sol '];
     expect(await confirmCopilotStart('no-console')).toMatchObject({ model: 'auto' });
     expect(await confirmCopilotStart('no-console')).toMatchObject({ model: 'gpt-5.6-sol' });
   });
@@ -171,9 +170,9 @@ describe('confirmCopilotStart', () => {
       'other',
       'custom',
       Symbol('cancel'),
-      'default',
+      'auto',
     ];
-    expect(await confirmCopilotStart('no-console')).not.toHaveProperty('model');
+    expect(await confirmCopilotStart('no-console')).toMatchObject({ model: 'auto' });
     expect(prompts.optionValues).toHaveLength(6);
   });
 
@@ -191,19 +190,21 @@ describe('confirmCopilotStart', () => {
 
   it('returns the edited prompt', async () => {
     prompts.texts = ['keep the API'];
-    prompts.answers = ['interactive', 'default'];
+    prompts.answers = ['interactive', 'auto'];
     expect(await confirmCopilotStart('no-console')).toEqual({
       instructions: 'keep the API',
       mode: 'interactive',
+      model: 'auto',
     });
   });
 
   it('sanitizes the prompt and warns about it', async () => {
     prompts.texts = ['say "hi" `now`\nsecond line'];
-    prompts.answers = ['interactive', 'default'];
+    prompts.answers = ['interactive', 'auto'];
     expect(await confirmCopilotStart('no-console')).toEqual({
       instructions: "say 'hi' now second line",
       mode: 'interactive',
+      model: 'auto',
     });
     expect(prompts.warnings).toHaveLength(1);
   });

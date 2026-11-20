@@ -26,8 +26,8 @@ const {
   runCopilotFix,
   sanitizeInstructions,
 } = await import('../../src/features/cli/copilot-fix');
-const { default: copilotFix } = await import('../../src/features/cli/copilot-fix.json');
-const ruleInstructions = copilotFix;
+const { default: copilotConfig } = await import('../../copilot.config.json');
+const ruleInstructions = copilotConfig;
 
 describe('parseModels', () => {
   const help = [
@@ -96,7 +96,8 @@ describe('copilotFixPrompt', () => {
 
   it('offers the default instructions with one line per sentence', () => {
     const defaults = defaultInstructions('no-console');
-    expect(defaults.split('\n').length).toBeGreaterThan(3);
+    expect(defaults.split('\n')).toHaveLength(copilotConfig.prompt.length);
+    expect(copilotConfig.prompt.length).toBeGreaterThan(1);
     expect(defaults).toContain('rule no-console');
     expect(defaults).not.toContain('{');
     expect(defaults).not.toContain('/exit');
@@ -125,7 +126,7 @@ describe('sanitizeInstructions', () => {
   });
 });
 
-describe('copilot-fix.json rules', () => {
+describe('copilot.config.json rules', () => {
   const entries: [string, { instructions?: string[]; defaultMode?: string }][] = Object.entries(
     ruleInstructions.rules,
   );

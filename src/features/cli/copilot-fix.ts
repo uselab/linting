@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import * as clack from '@clack/prompts';
 import type { Problem } from './analyze';
-import copilotFix from './copilot-fix.json';
+import copilotConfig from '../../../copilot.config.json';
 
 const SAFE_RULE_ID = /^[\w@/.-]+$/u;
 /** Paths that can be put in the quoted `--allow-tool` value without escaping. */
@@ -78,16 +78,16 @@ export const listCopilotModels = (): string[] => {
 type RuleSettings = { instructions?: string[]; defaultMode?: string };
 
 const ruleSettings = (ruleId: string): RuleSettings | undefined => {
-  const rules: Record<string, RuleSettings> = copilotFix.rules;
+  const rules: Record<string, RuleSettings> = copilotConfig.rules;
   return Object.hasOwn(rules, ruleId) ? rules[ruleId] : undefined;
 };
 
-/** The preselected Copilot mode of a rule from `copilot-fix.json`; interactive when not set. */
+/** The preselected Copilot mode of a rule from `copilot.config.json`; interactive when not set. */
 export const defaultMode = (ruleId: string): CopilotMode =>
   MODES.find((candidate) => candidate === ruleSettings(ruleId)?.defaultMode) ?? 'interactive';
 
-/** The models offered first in the model question, from `copilot-fix.json`. */
-export const defaultModels = (): string[] => copilotFix.defaultModels.filter(isValidModel);
+/** The models offered first in the model question, from `copilot.config.json`. */
+export const defaultModels = (): string[] => copilotConfig.defaultModels.filter(isValidModel);
 
 const USED_MODELS_FILE = path.join(MESSAGE_DIR, 'used-models.json');
 const MAX_USED_MODELS = 10;
@@ -127,7 +127,7 @@ export const modelChoices = (): string[] => {
   return [...defaults, ...usedModels().filter((model) => !defaults.includes(model))];
 };
 
-/** The rule-specific instructions from `copilot-fix.json` as lines, if the rule has any. */
+/** The rule-specific instructions from `copilot.config.json` as lines, if the rule has any. */
 const instructionsFor = (ruleId: string): string[] => {
   const lines = ruleSettings(ruleId)?.instructions;
   return lines && lines.length > 0 ? ['Specific guidance for this rule:', ...lines] : [];
@@ -150,7 +150,7 @@ export const sanitizeInstructions = (text: string): string =>
  * by the rule-specific instructions, a heading and then one line per entry.
  */
 export const defaultInstructions = (ruleId: string): string =>
-  [...copilotFix.prompt, ...instructionsFor(ruleId)]
+  [...copilotConfig.prompt, ...instructionsFor(ruleId)]
     .map((line) => line.replaceAll('{ruleId}', ruleId))
     .join(INSTRUCTIONS_SEPARATOR);
 
@@ -163,7 +163,7 @@ export const fixedInstructions = (
   messageFile: string,
   problemsFile = 'a temporary file',
 ): string =>
-  copilotFix.fixedInstructions
+  copilotConfig.fixedInstructions
     .join(' ')
     .replaceAll('{ruleId}', ruleId)
     .replaceAll('{messageFile}', messageFile)
@@ -182,7 +182,7 @@ export const problemsText = (ruleId: string, problems: Problem[]): string =>
 
 /**
  * The prompt for Copilot: the fixed instructions followed by the (edited) instructions, which
- * are the defaults when not given. The text is in `copilot-fix.json`. The problems themselves
+ * are the defaults when not given. The text is in `copilot.config.json`. The problems themselves
  * are in `problemsFile`.
  */
 export const copilotFixPrompt = (

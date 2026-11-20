@@ -121,7 +121,7 @@ const stepFor = (action: ChangeAction, projectDir: string, context: StepContext)
       () => writeDisabledRules(projectDir, [ruleId]),
     ],
     ignore: () => [
-      `Added eslint-disable comments for ${ruleId}`,
+      `Added eslint-disable-next-line comments for ${ruleId}`,
       () => ignoreRules(projectDir, [ruleId], problems),
     ],
     editIgnores: () => [

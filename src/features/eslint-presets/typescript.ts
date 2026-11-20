@@ -58,6 +58,7 @@ const typescriptConfigs: Config[] = [
     name: 'uselab/typescript/rules',
     files: TS_AND_VUE_FILES,
     rules: {
+      'no-unreachable': 'error',
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': 'error',
       '@typescript-eslint/consistent-type-definitions': ['error', 'type'],

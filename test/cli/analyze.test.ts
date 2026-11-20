@@ -435,6 +435,17 @@ describe('runAnalyze', () => {
     expect(output.match(/ESLint analysis/gu)).toHaveLength(1);
   });
 
+  it('prints only a short message when there are no problems', async () => {
+    write('src/a.js', 'const a = 1;\nexport default a;\n');
+    write('src/b.js', 'export default 2;\n');
+
+    await runAnalyze(dir, false);
+
+    expect(output).toContain('No issues found. Your project is lint free!');
+    expect(output).not.toContain('ESLint analysis');
+    expect(process.exitCode).toBeUndefined();
+  });
+
   it('does not ask to run lint:fix when nothing is fixable', async () => {
     write('src/a.js', 'console.log(1);\n');
 

@@ -3,12 +3,14 @@ import * as ask from './ask';
 import {
   defaultInstructions,
   defaultMode,
+  defaultModels,
   fixedInstructions,
   isValidModel,
   listCopilotModels,
   modelChoices,
   sanitizeInstructions,
   saveUsedModel,
+  usedModels,
   type CopilotMode,
 } from './copilot-fix';
 import { multiline } from './multiline';
@@ -21,12 +23,10 @@ export const COPILOT_START_NOTE =
 /** The user agreed to start Copilot with these (possibly edited) instructions. */
 export type CopilotStart = { instructions: string; mode: CopilotMode; model?: string };
 
-const DEFAULT_MODEL = 'default';
 const OTHER_MODEL = 'other';
 const CUSTOM_MODEL = 'custom';
 
-const MODEL_HINT =
-  'Run /model in Copilot to see the models you can use. Leave the model out to use your Copilot default.';
+const MODEL_HINT = 'Run /model in Copilot to see the models you can use.';
 
 /** Asks for a model from all models Copilot lists, or a typed name; undefined goes back. */
 const askAnyModel = async (): Promise<string | undefined> => {
@@ -53,25 +53,22 @@ const askAnyModel = async (): Promise<string | undefined> => {
 };
 
 /**
- * Asks for the model: Copilot's default, one of the `defaultModels` of `copilot-fix.json`, or
- * another model from the full list. Returns undefined when the user goes back.
+ * Asks for the model: one of the `defaultModels` of `copilot.config.json` or the models used before
+ * (the last used one is preselected), or another model from the full list. Returns undefined when
+ * the user goes back.
  */
-const askModel = async (): Promise<{ model?: string } | undefined> => {
+const askModel = async (): Promise<{ model: string } | undefined> => {
   for (;;) {
     const choice = await ask.select<string>({
       message: 'Copilot model (Esc to go back)',
-      initialValue: DEFAULT_MODEL,
+      initialValue: usedModels()[0] ?? defaultModels()[0],
       options: [
-        { value: DEFAULT_MODEL, label: 'Default', hint: 'the model configured in Copilot' },
         ...modelChoices().map((model) => ({ value: model, label: model })),
         { value: OTHER_MODEL, label: 'Other model', hint: 'choose from all models' },
       ],
     });
     if (typeof choice === 'symbol') {
       return undefined;
-    }
-    if (choice === DEFAULT_MODEL) {
-      return {};
     }
     if (choice !== OTHER_MODEL) {
       saveUsedModel(choice);
@@ -119,9 +116,21 @@ export const confirmCopilotStart = async (ruleId: string): Promise<CopilotStart 
     message: 'Copilot mode (Esc to go back)',
     initialValue: defaultMode(ruleId),
     options: [
-      { value: 'interactive', label: 'Interactive' },
-      { value: 'plan', label: 'Plan' },
-      { value: 'autopilot', label: 'Autopilot' },
+      {
+        value: 'interactive',
+        label: 'Interactive',
+        hint: 'Copilot asks for permission and input as it works',
+      },
+      {
+        value: 'plan',
+        label: 'Plan',
+        hint: 'Copilot makes a plan first, which you approve before it changes files',
+      },
+      {
+        value: 'autopilot',
+        label: 'Autopilot',
+        hint: 'Copilot works on its own until the task is done',
+      },
     ],
   });
   if (typeof mode === 'symbol') {
