@@ -295,6 +295,11 @@ const numberedLines = ({ lines }: Example): string[] => {
 
 export const TERMINAL_REPORT_TITLE = 'ESLint analysis';
 
+const ALL_GREEN_MESSAGE = styleText(
+  ['bold', 'green'],
+  'No issues found. Your project is lint free!',
+);
+
 /** Whether the top of the report would scroll out of view. */
 const repeatsSummary = (reportLines: number, rows: number | undefined): boolean =>
   rows === undefined || reportLines > rows;
@@ -346,6 +351,15 @@ const printReport = (
   analysis: Analysis,
   { interactive, run, focus }: { interactive: boolean; run: number; focus?: string },
 ): void => {
+  const allGreen = analysis.rules.length === 0 && (analysis.excludedFixable ?? 0) === 0;
+  if (allGreen) {
+    if (interactive) {
+      clack.log.success(ALL_GREEN_MESSAGE);
+    } else {
+      process.stdout.write(`\n${ALL_GREEN_MESSAGE}\n\n`);
+    }
+    return;
+  }
   if (!interactive) {
     process.stdout.write(`\n${formatTerminalReport(analysis)}\n\n`);
     return;
