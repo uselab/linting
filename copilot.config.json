@@ -48,6 +48,9 @@
         "4. A feature imports app/: move the shared code to support/, or pass it in from app/.",
         "5. None of these fit, for example because A cannot work without B concepts: stop and ask me."
       ]
+    },
+    "no-useless-assignment": {
+      "instructions": ["Do not use hoisting to fix this issue."]
     }
   }
 }
