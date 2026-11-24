@@ -17,8 +17,10 @@ import { multiline } from './multiline';
 
 export type { CopilotMode };
 
-export const COPILOT_START_NOTE =
-  'GitHub Copilot will be started to fix the problems of this rule. When it is done you return to this CLI.\nTo leave Copilot when it is done, type /exit.';
+const copilotStartNote = (goal: string): string =>
+  `GitHub Copilot will be started to ${goal}. When it is done you return to this CLI.\nTo leave Copilot when it is done, type /exit.`;
+
+export const COPILOT_START_NOTE = copilotStartNote('fix the problems of this rule');
 
 /** The user agreed to start Copilot with these (possibly edited) instructions. */
 export type CopilotStart = { instructions: string; mode: CopilotMode; model?: string };
@@ -95,13 +97,18 @@ const cleanInstructions = (text: string): string => {
 
 /**
  * Explains how Copilot is started and left, then lets the user edit the instructions for the rule
- * and choose the Copilot mode. The fixed instructions are shown but cannot be edited. Returns how
- * to start Copilot, or undefined when the user cancels to go back.
+ * (or task, with its own `goal` and `title`) and choose the Copilot mode. The fixed instructions
+ * are shown but cannot be edited. Returns how to start Copilot, or undefined when the user
+ * cancels to go back.
  */
-export const confirmCopilotStart = async (ruleId: string): Promise<CopilotStart | undefined> => {
+export const confirmCopilotStart = async (
+  ruleId: string,
+  { goal, title = 'Fix with Copilot' }: { goal?: string; title?: string } = {},
+): Promise<CopilotStart | undefined> => {
+  const note = goal === undefined ? COPILOT_START_NOTE : copilotStartNote(goal);
   clack.note(
-    `${COPILOT_START_NOTE}\n\nAlways added in front of your instructions:\n${fixedInstructions(ruleId, 'a temporary file')}`,
-    'Fix with Copilot',
+    `${note}\n\nAlways added in front of your instructions:\n${fixedInstructions(ruleId, 'a temporary file')}`,
+    title,
   );
   const instructions = await multiline({
     message: 'Instructions for Copilot',

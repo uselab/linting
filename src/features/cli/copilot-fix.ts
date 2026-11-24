@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -27,9 +27,16 @@ const ALLOW_CHECK = [
 export const COPILOT_MISSING_MESSAGE =
   'GitHub Copilot CLI (`copilot`) was not found. Install it (https://docs.github.com/en/copilot/how-tos/copilot-cli) and sign in, then try again.';
 
+/**
+ * Runs `copilot` with the arguments through a shell (needed for the `.cmd` shim on Windows). The
+ * command is one string, as Node deprecates passing arguments together with `shell: true`.
+ */
+const spawnCopilot = (args: string[], options: SpawnSyncOptions) =>
+  spawnSync(['copilot', ...args].join(' '), { ...options, shell: true });
+
 /** Whether the GitHub Copilot CLI can be started. */
 export const isCopilotAvailable = (): boolean =>
-  spawnSync('copilot', ['--version'], { shell: true, stdio: 'ignore' }).status === 0;
+  spawnCopilot(['--version'], { stdio: 'ignore' }).status === 0;
 
 const INSTRUCTIONS_SEPARATOR = '\n';
 
@@ -67,19 +74,24 @@ export const parseModels = (helpText: string): string[] => {
 
 /** The models the installed Copilot CLI knows of; empty when they can't be determined. */
 export const listCopilotModels = (): string[] => {
-  const result = spawnSync('copilot', ['help', 'config'], {
-    shell: true,
+  const result = spawnCopilot(['help', 'config'], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
   });
-  return result.status === 0 ? parseModels(result.stdout) : [];
+  return result.status === 0 ? parseModels(String(result.stdout)) : [];
 };
 
-type RuleSettings = { instructions?: string[]; defaultMode?: string };
+type RuleSettings = {
+  instructions?: string[];
+  defaultMode?: string;
+  fixedInstructions?: string[];
+  prompt?: string[];
+};
 
+/** The settings of a rule, or of a task (an id like `commonjs` that is not an ESLint rule). */
 const ruleSettings = (ruleId: string): RuleSettings | undefined => {
-  const rules: Record<string, RuleSettings> = copilotConfig.rules;
-  return Object.hasOwn(rules, ruleId) ? rules[ruleId] : undefined;
+  const settings: Record<string, RuleSettings> = { ...copilotConfig.rules, ...copilotConfig.tasks };
+  return Object.hasOwn(settings, ruleId) ? settings[ruleId] : undefined;
 };
 
 /** The preselected Copilot mode of a rule from `copilot.config.json`; interactive when not set. */
@@ -150,7 +162,7 @@ export const sanitizeInstructions = (text: string): string =>
  * by the rule-specific instructions, a heading and then one line per entry.
  */
 export const defaultInstructions = (ruleId: string): string =>
-  [...copilotConfig.prompt, ...instructionsFor(ruleId)]
+  [...(ruleSettings(ruleId)?.prompt ?? copilotConfig.prompt), ...instructionsFor(ruleId)]
     .map((line) => line.replaceAll('{ruleId}', ruleId))
     .join(INSTRUCTIONS_SEPARATOR);
 
@@ -163,7 +175,7 @@ export const fixedInstructions = (
   messageFile: string,
   problemsFile = 'a temporary file',
 ): string =>
-  copilotConfig.fixedInstructions
+  (ruleSettings(ruleId)?.fixedInstructions ?? copilotConfig.fixedInstructions)
     .join(' ')
     .replaceAll('{ruleId}', ruleId)
     .replaceAll('{messageFile}', messageFile)
@@ -222,6 +234,17 @@ const readMessage = (file: string): string | undefined => {
   }
 };
 
+/** Why Copilot can't be started with this rule and model, if so. */
+const startError = (ruleId: string, model: string | undefined): string | undefined => {
+  if (!SAFE_RULE_ID.test(ruleId)) {
+    return `Can't pass the rule name ${ruleId} to Copilot.`;
+  }
+  if (model !== undefined && !isValidModel(model)) {
+    return `Can't pass the model name ${model} to Copilot.`;
+  }
+  return isCopilotAvailable() ? undefined : COPILOT_MISSING_MESSAGE;
+};
+
 /** The outcome of a Copilot run: whether it ran fine, and the commit message it wrote, if any. */
 export type CopilotResult = { ok: boolean; message?: string };
 
@@ -239,30 +262,26 @@ export const runCopilotFix = (
     mode = 'interactive',
     model,
     problems = [],
+    details,
   }: {
     files: string[];
     instructions?: string;
     mode?: CopilotMode;
     model?: string;
     problems?: Problem[];
+    /** The content of the problems file for a task that has no ESLint problems. */
+    details?: string;
   },
 ): CopilotResult => {
-  if (!SAFE_RULE_ID.test(ruleId)) {
-    clack.log.error(`Can't pass the rule name ${ruleId} to Copilot.`);
-    return { ok: false };
-  }
-  if (model !== undefined && !isValidModel(model)) {
-    clack.log.error(`Can't pass the model name ${model} to Copilot.`);
-    return { ok: false };
-  }
-  if (!isCopilotAvailable()) {
-    clack.log.error(COPILOT_MISSING_MESSAGE);
+  const error = startError(ruleId, model);
+  if (error !== undefined) {
+    clack.log.error(error);
     return { ok: false };
   }
   mkdirSync(path.join(projectDir, MESSAGE_DIR), { recursive: true });
   const messageFile = `${MESSAGE_DIR}/commit-${randomUUID()}.txt`;
   const problemsFile = `${MESSAGE_DIR}/problems-${randomUUID()}.txt`;
-  writeFileSync(path.join(projectDir, problemsFile), problemsText(ruleId, problems));
+  writeFileSync(path.join(projectDir, problemsFile), details ?? problemsText(ruleId, problems));
   const prompt = copilotFixPrompt(ruleId, messageFile, { instructions, problemsFile });
   const args = [
     '-i',
@@ -271,7 +290,7 @@ export const runCopilotFix = (
     ...(mode === 'interactive' ? [] : ['--mode', mode]),
     ...(model === undefined ? [] : ['--model', model]),
   ];
-  const result = spawnSync('copilot', args, { cwd: projectDir, stdio: 'inherit', shell: true });
+  const result = spawnCopilot(args, { cwd: projectDir, stdio: 'inherit' });
   const message = readMessage(path.join(projectDir, messageFile));
   rmSync(path.join(projectDir, problemsFile), { force: true });
   if (result.status !== 0) {

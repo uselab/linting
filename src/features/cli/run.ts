@@ -7,14 +7,8 @@ import {
   removeExistingTooling,
   TOOLING_FILES,
 } from './cleanup';
-import {
-  findCommonJsUsages,
-  MODULE_TYPE_MAX_USAGES,
-  moduleTypeNote,
-  refactorReport,
-  REFACTOR_REPORT_FILE,
-  reportWrittenMessage,
-} from './commonjs';
+import { findCommonJsUsages, moduleTypeNote } from './commonjs';
+import { askCommonJsRefactor, refactorCommonJs } from './commonjs-refactor';
 import {
   checkDependencies,
   installCommand,
@@ -64,7 +58,7 @@ import { updateSourceTsconfigs, updateViteConfig } from './aliases';
 import { runAnalyze } from './analyze';
 import { runCheckRule } from './check-rule';
 import { offerAnalyze } from './analyze-offer';
-import { createCommitOffer } from './commit-offer';
+import { createCommitOffer, type CommitOffer } from './commit-offer';
 import { isInstalledOutdated } from './install';
 import { ownVersion } from './own-version';
 
@@ -102,26 +96,33 @@ const writeFile = (tracked: TrackedFiles, file: string, content: string): void =
 
 /**
  * Offers to set `"type": "module"` in package.json, listing the CommonJS code that would break.
- * Returns the (possibly updated) package.json.
+ * With such code the choice is to let Copilot convert it (a step with its own commit) or to keep
+ * the type unchanged. Returns the (possibly updated) package.json.
  */
 const updateModuleType = async (
   projectDir: string,
   project: ProjectPackage | undefined,
+  commits: CommitOffer,
 ): Promise<ProjectPackage | undefined> => {
   if (!project || isModulePackage(project.data)) {
     return project;
   }
   const usages = findCommonJsUsages(projectDir, TOOLING_FILES);
   clack.note(moduleTypeNote(project.data.type, usages), '"type": "module"');
-  const initialValue = usages.length <= MODULE_TYPE_MAX_USAGES;
-  if (!(await confirm('Set "type": "module" in package.json?', initialValue))) {
-    return project;
-  }
-  writeFileSync(path.join(projectDir, 'package.json'), setModuleType(project.text));
-  clack.log.success('Set "type": "module" in package.json.');
-  if (usages.length > 0) {
-    writeFileSync(path.join(projectDir, REFACTOR_REPORT_FILE), refactorReport(usages));
-    clack.log.warn(reportWrittenMessage(usages));
+  const setType = (): void => {
+    writeFileSync(path.join(projectDir, 'package.json'), setModuleType(project.text));
+    clack.log.success('Set "type": "module" in package.json.');
+  };
+  if (usages.length === 0) {
+    if (await confirm('Set "type": "module" in package.json?')) {
+      setType();
+    }
+  } else {
+    const start = await askCommonJsRefactor();
+    if (!start) {
+      return project;
+    }
+    await refactorCommonJs(projectDir, { usages, start, commits, setType });
   }
   return readPackageJson(projectDir);
 };
@@ -410,9 +411,10 @@ const init = async (projectDir: string): Promise<void> => {
     existing,
   );
   const commits = createCommitOffer(projectDir, isInteractive(), { clean: true });
-  const finishChanges = commits.begin();
 
-  const updatedProject = await updateModuleType(projectDir, project);
+  // First, as the config file name depends on the module type; Copilot's changes get their own commit.
+  const updatedProject = await updateModuleType(projectDir, project, commits);
+  const finishChanges = commits.begin();
   const isModule = isModulePackage(updatedProject?.data);
   const files: ConfigFiles = {
     eslint: eslintConfigFile(isModule),

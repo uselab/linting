@@ -1,5 +1,5 @@
 {
-  "description": "Prompt for Copilot CLI to fix the problems of one ESLint rule, plus settings per rule. 'fixedInstructions' always come first and cannot be edited by the user; 'prompt' is the default of the editable instructions. Lines are joined with a space. {ruleId} is replaced by the rule, {messageFile} by the file for the commit message and {problemsFile} by the file with the problems of the rule. Per rule in 'rules' (rule id -> object): 'instructions' (list of lines, shown as separate lines in the editable instructions) are added after 'prompt' under a heading, and 'defaultMode' (interactive, plan or autopilot; interactive when absent) is the preselected Copilot mode. 'defaultModels' are the models offered first in the model question (models used before in the project are appended after them); another question lists all models of Copilot. Keep everything free of double quotes, backticks and shell characters (single quotes are fine): the prompt is passed through a shell inside double quotes.",
+  "description": "Prompt for Copilot CLI to fix the problems of one ESLint rule, plus settings per rule. 'fixedInstructions' always come first and cannot be edited by the user; 'prompt' is the default of the editable instructions. Lines are joined with a space. {ruleId} is replaced by the rule, {messageFile} by the file for the commit message and {problemsFile} by the file with the problems of the rule. Per task in 'tasks' (task id -> object, used for Copilot tasks that are not about a rule, such as 'commonjs', the refactor to ES modules): 'fixedInstructions' and 'prompt' replace the ones above, and 'defaultMode' is the preselected mode. Per rule in 'rules' (rule id -> object): 'instructions' (list of lines, shown as separate lines in the editable instructions) are added after 'prompt' under a heading, and 'defaultMode' (interactive, plan or autopilot; interactive when absent) is the preselected Copilot mode. 'defaultModels' are the models offered first in the model question (models used before in the project are appended after them); another question lists all models of Copilot. Keep everything free of double quotes, backticks and shell characters (single quotes are fine): the prompt is passed through a shell inside double quotes.",
   "defaultModels": ["auto", "claude-sonnet-5.5", "gpt-6.1-terra", "mai-code-1.1-flash"],
   "fixedInstructions": [
     "The problems to fix are listed in the file {problemsFile}; read it while you plan. Do not run the check command while planning, as plan mode blocks it. The task is done when this command returns 0: npx uselab-linting check '{ruleId}'. Run it once you start implementing. When you are done, write a one-line commit message that describes the fix to the file {messageFile}, then tell me to type /exit to return."
@@ -9,6 +9,21 @@
     "Fix the root cause. Do not take shortcuts: do not disable the rule, add eslint-disable-next-line comments, change the ESLint config or ignores, use ts-ignore or any or type assertions to silence the error without my permission.",
     "If you create new files or move files make sure they are tracked by Git."
   ],
+  "tasks": {
+    "commonjs": {
+      "defaultMode": "plan",
+      "fixedInstructions": [
+        "The CommonJS code to convert is listed in the file {problemsFile}; read it while you plan. package.json now has type module, so .js, .jsx, .ts and .tsx files are ES modules. When you are done, write a one-line commit message that describes the refactor to the file {messageFile}, then tell me to type /exit to return."
+      ],
+      "prompt": [
+        "Convert the listed CommonJS code to ES modules and change nothing else.",
+        "Use import and export instead of require, module.exports and exports. Use import.meta.dirname and import.meta.filename instead of __dirname and __filename. Use createRequire(import.meta.url) from node:module only when a require cannot be replaced.",
+        "If a file has to stay CommonJS, rename it to .cjs or .cts and update everything that refers to it.",
+        "Also fix the code that depends on the converted files, such as imports and scripts in package.json. Do not change the type in package.json or the ESLint config.",
+        "If you create new files or move files make sure they are tracked by Git."
+      ]
+    }
+  },
   "rules": {
     "@typescript-eslint/no-explicit-any": {
       "instructions": [
@@ -48,6 +63,9 @@
         "4. A feature imports app/: move the shared code to support/, or pass it in from app/.",
         "5. None of these fit, for example because A cannot work without B concepts: stop and ask me."
       ]
+    },
+    "no-useless-assignment": {
+      "instructions": ["Do not use hoisting to fix this issue."]
     }
   }
 }
