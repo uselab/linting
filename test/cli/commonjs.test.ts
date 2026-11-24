@@ -7,7 +7,8 @@ import {
   FIX_HINTS,
   formatUsages,
   moduleTypeNote,
-  refactorReport,
+  remainingUsagesMessage,
+  usagesText,
   type CommonJsUsage,
 } from '../../src/features/cli/commonjs';
 
@@ -169,16 +170,10 @@ describe('moduleTypeNote', () => {
       expect(lines.some((line) => showsUsage(line, item))).toBe(list.indexOf(item) < 10);
     }
   });
-
-  it('adds an explanation above 20 usages', () => {
-    const lineCount = (count: number): number =>
-      moduleTypeNote(undefined, usages(count)).split('\n').length;
-    expect(lineCount(21)).toBe(lineCount(20) + 1);
-  });
 });
 
-describe('refactorReport', () => {
-  it('lists all usages per file with fix hints for the used kinds only', () => {
+describe('usagesText', () => {
+  it('lists all usages with fix hints for the used kinds only', () => {
     const dirnameUsage: CommonJsUsage = {
       file: 'b.ts',
       line: 4,
@@ -186,22 +181,21 @@ describe('refactorReport', () => {
       text: 'const d = `${__dirname}${__filename}`;',
     };
     const list = [...usages(12), dirnameUsage];
-    const lines = refactorReport(list).split('\n');
-    const fileHeading = (file: string): number =>
-      lines.findIndex((line) => line.includes(file) && !line.includes(':'));
+    const lines = usagesText(list).split('\n');
 
     for (const item of list) {
-      const index = lines.findIndex(
-        (line) => line.includes(item.text) && new RegExp(`\\b${item.line}\\b`).test(line),
-      );
-      expect(index).toBeGreaterThan(fileHeading(item.file));
-      expect(fileHeading(item.file)).toBeGreaterThan(-1);
+      expect(lines.some((line) => showsUsage(line, item) && line.includes(item.text))).toBe(true);
     }
     expect(lines.some((line) => line.includes(FIX_HINTS.__dirname))).toBe(true);
     expect(lines.some((line) => line.includes(FIX_HINTS.__filename))).toBe(true);
-    expect(lines.filter((line) => line.includes('__dirname') && /\b4\b/.test(line))).toHaveLength(
-      1,
-    );
     expect(lines.some((line) => line.includes(FIX_HINTS['module.exports']))).toBe(false);
+  });
+});
+
+describe('remainingUsagesMessage', () => {
+  it('counts the usages and lists them', () => {
+    const lines = remainingUsagesMessage(usages(2)).split('\n');
+    expect(lines[0]).toContain('2 CommonJS usages left');
+    expect(lines.some((line) => showsUsage(line, usage(2)))).toBe(true);
   });
 });

@@ -9,6 +9,7 @@ import {
   dir,
   failedWith,
   findUncommittedChanges,
+  mocks,
   read,
 } from './run-harness';
 
@@ -224,7 +225,7 @@ describe('run init', () => {
     expect(findUncommittedChanges(dir)).toContain('R  prettier.config.mts -> prettier.config.ts');
   });
 
-  it('stages the new files in git, except the CommonJS refactor report', async () => {
+  it('stages the new files in git', async () => {
     mkdirSync(path.join(dir, 'src'));
     writeFileSync(path.join(dir, 'src', 'legacy.js'), 'module.exports = 1;\n');
     answers.presets = ['javascript', 'prettier'];
@@ -234,13 +235,9 @@ describe('run init', () => {
 
     const changes = findUncommittedChanges(dir);
     expect(changes).toEqual(
-      expect.arrayContaining([
-        'A  eslint.config.ts',
-        'A  prettier.config.ts',
-        ' M package.json',
-        '?? REFACTOR-COMMON-JS.md',
-      ]),
+      expect.arrayContaining(['A  eslint.config.ts', 'A  prettier.config.ts', ' M package.json']),
     );
+    expect(changes.some((change) => change.includes('REFACTOR'))).toBe(false);
   });
 
   it('warns about new files that git ignores', async () => {
@@ -396,7 +393,7 @@ describe('run init', () => {
     expect(config).toContain('...nodePreset');
   });
 
-  it('defaults to "type": "module" without CommonJS code and writes no report', async () => {
+  it('defaults to "type": "module" without CommonJS code and does not start Copilot', async () => {
     answers.presets = ['javascript'];
     answers.confirm = true;
 
@@ -404,10 +401,10 @@ describe('run init', () => {
 
     expect(answers.confirmDefaults).toEqual([true]);
     expect(JSON.parse(read('package.json')).type).toBe('module');
-    expect(existsSync(path.join(dir, 'REFACTOR-COMMON-JS.md'))).toBe(false);
+    expect(mocks.runCopilotFix).not.toHaveBeenCalled();
   });
 
-  it('replaces "type": "commonjs" and writes a report of the CommonJS code', async () => {
+  it('replaces "type": "commonjs" and lets Copilot convert the CommonJS code', async () => {
     writeFileSync(path.join(dir, 'package.json'), '{\n  "name": "app",\n  "type": "commonjs"\n}\n');
     mkdirSync(path.join(dir, 'scripts'));
     writeFileSync(
@@ -415,41 +412,66 @@ describe('run init', () => {
       "const fs = require('node:fs');\nmodule.exports = fs;\n",
     );
     answers.presets = ['javascript'];
-    answers.confirm = true;
+    let typeWhenCopilotStarted: unknown;
+    mocks.runCopilotFix.mockImplementation(() => {
+      typeWhenCopilotStarted = JSON.parse(read('package.json')).type;
+      return { ok: true };
+    });
 
     await commitAndInit(dir);
 
-    expect(answers.confirmDefaults).toEqual([true]);
+    expect(mocks.runCopilotFix).toHaveBeenCalledOnce();
+    const [, taskId, options] = mocks.runCopilotFix.mock.calls[0] ?? [];
+    expect(taskId).toBe('commonjs');
+    expect(options).toMatchObject({ files: ['scripts/build.js'], mode: 'plan', model: 'auto' });
+    expect(options?.details).toContain(
+      "scripts/build.js:1  require()  const fs = require('node:fs');",
+    );
+    expect(options?.details).toContain('scripts/build.js:2  module.exports');
+    expect(typeWhenCopilotStarted).toBe('module');
     const packageJson = JSON.parse(read('package.json'));
     const keys = Object.keys(packageJson);
     expect(keys[keys.indexOf('name') + 1]).toBe('type');
     expect(packageJson.type).toBe('module');
     expect(read('eslint.config.ts')).toContain("...javascriptPreset({ testFiles: ['test/**'] }),");
-    const report = read('REFACTOR-COMMON-JS.md').split('\n');
-    const heading = report.findIndex((line) => line.includes('scripts/build.js'));
-    const requireLine = report.findIndex((line) => line.includes("const fs = require('node:fs');"));
-    const exportsLine = report.findIndex(
-      (line) => line.includes('module.exports') && /\b2\b/.test(line),
-    );
-    expect(heading).toBeGreaterThan(-1);
-    expect(requireLine).toBeGreaterThan(heading);
-    expect(exportsLine).toBeGreaterThan(requireLine);
+    expect(existsSync(path.join(dir, 'REFACTOR-COMMON-JS.md'))).toBe(false);
   });
 
-  it('defaults to No with more than 20 CommonJS usages and writes no report when declined', async () => {
+  it('warns about CommonJS code that is left after Copilot', async () => {
+    mkdirSync(path.join(dir, 'scripts'));
+    writeFileSync(path.join(dir, 'scripts', 'build.js'), "require('x');\n");
+    answers.presets = ['javascript'];
+
+    await commitAndInit(dir);
+
+    expect(answers.warnings).toContainEqual(expect.stringContaining('1 CommonJS usage left'));
+  });
+
+  it('keeps the type unchanged without starting Copilot when asked to', async () => {
+    mkdirSync(path.join(dir, 'scripts'));
+    writeFileSync(path.join(dir, 'scripts', 'build.js'), "require('x');\n");
+    answers.presets = ['javascript'];
+    answers.moduleType = 'keep';
+
+    await commitAndInit(dir);
+
+    expect(mocks.runCopilotFix).not.toHaveBeenCalled();
+    expect(JSON.parse(read('package.json')).type).toBeUndefined();
+    expect(read('eslint.config.mts')).toContain('javascriptPreset');
+  });
+
+  it('defaults to Copilot refactoring however many CommonJS usages there are', async () => {
     mkdirSync(path.join(dir, 'scripts'));
     writeFileSync(
       path.join(dir, 'scripts', 'many.js'),
       Array.from({ length: 21 }, (_, index) => `require('x${index}');`).join('\n'),
     );
     answers.presets = ['javascript'];
-    answers.confirm = false;
 
     await commitAndInit(dir);
 
-    expect(answers.confirmDefaults).toEqual([false]);
-    expect(JSON.parse(read('package.json')).type).toBeUndefined();
-    expect(existsSync(path.join(dir, 'REFACTOR-COMMON-JS.md'))).toBe(false);
+    expect(mocks.runCopilotFix).toHaveBeenCalledOnce();
+    expect(JSON.parse(read('package.json')).type).toBe('module');
   });
 
   it('fails for a missing target directory', async () => {

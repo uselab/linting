@@ -2,8 +2,6 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { isScannedDirectory } from './detect';
 
-export const REFACTOR_REPORT_FILE = 'REFACTOR-COMMON-JS.md';
-
 export type CommonJsKind =
   | 'import = require()'
   | 'require()'
@@ -139,8 +137,6 @@ export const formatUsages = (usages: readonly CommonJsUsage[], limit = 10): stri
   return lines.join('\n');
 };
 
-/** Up to this many CommonJS usages, setting `"type": "module"` is the default answer. */
-export const MODULE_TYPE_MAX_USAGES = 20;
 const LISTED_USAGES = 10;
 
 const plural = (count: number): string => (count === 1 ? 'usage' : 'usages');
@@ -164,12 +160,7 @@ const describeUsages = (usages: readonly CommonJsUsage[]): string => {
   const lines = [
     `Found ${usages.length} CommonJS ${plural(usages.length)} to convert (or rename the file to .cjs / .cts):`,
     formatUsages(usages, LISTED_USAGES),
-    '',
-    `When set, all of them are listed in ${REFACTOR_REPORT_FILE}.`,
   ];
-  if (usages.length > MODULE_TYPE_MAX_USAGES) {
-    lines.push(`More than ${MODULE_TYPE_MAX_USAGES}, so the default is No.`);
-  }
   return lines.join('\n');
 };
 
@@ -177,49 +168,25 @@ const describeUsages = (usages: readonly CommonJsUsage[]): string => {
 export const moduleTypeNote = (type: unknown, usages: readonly CommonJsUsage[]): string =>
   `${moduleTypeExplanation(type)}\n\n${describeUsages(usages)}`;
 
-/** Logged after writing the report. */
-export const reportWrittenMessage = (usages: readonly CommonJsUsage[]): string =>
-  `Wrote ${REFACTOR_REPORT_FILE}: ${usages.length} CommonJS ${plural(usages.length)} to convert.`;
-
-const inlineCode = (text: string): string => {
-  const fence = '`'.repeat(Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length)) + 1);
-  const padding = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
-  return `${fence}${padding}${text}${padding}${fence}`;
-};
-
-/** Markdown checklist of all usages, grouped per file, with how to fix each kind. */
-export const refactorReport = (usages: readonly CommonJsUsage[]): string => {
-  const files = [...new Set(usages.map(({ file }) => file))];
+/** The usages as text for Copilot: how to fix each kind, then every place with its line. */
+export const usagesText = (usages: readonly CommonJsUsage[]): string => {
   const kinds = PATTERNS.map(({ kind }) => kind).filter((kind) =>
     usages.some((usage) => usage.kinds.includes(kind)),
   );
   return [
-    '# Refactor CommonJS',
+    `CommonJS code to convert (${usages.length} ${plural(usages.length)}):`,
     '',
-    '`"type": "module"` was added to package.json, so `.js`, `.jsx`, `.ts` and `.tsx` files are now',
-    'ES modules. The places below still use CommonJS and fail to load until they are converted.',
-    'Alternatively, rename a file to `.cjs` / `.cts` to keep it CommonJS.',
+    'How to fix:',
+    ...kinds.map((kind) => `- ${kind}: ${FIX_HINTS[kind]}`),
     '',
-    'Delete this file when done.',
-    '',
-    '## How to fix',
-    '',
-    '| Pattern | Fix |',
-    '| ------- | --- |',
-    ...kinds.map((kind) => `| ${inlineCode(kind)} | ${FIX_HINTS[kind]} |`),
-    '',
-    `## Places (${usages.length} in ${files.length} ${files.length === 1 ? 'file' : 'files'})`,
-    ...files.flatMap((file) => [
-      '',
-      `### ${inlineCode(file)}`,
-      '',
-      ...usages
-        .filter((usage) => usage.file === file)
-        .map(
-          ({ line, kinds: lineKindList, text }) =>
-            `- [ ] line ${line}: ${lineKindList.map(inlineCode).join(', ')} — ${inlineCode(text)}`,
-        ),
-    ]),
+    'Places (file:line  patterns  code):',
+    ...usages.map(
+      ({ file, line, kinds: found, text }) => `${file}:${line}  ${found.join(', ')}  ${text}`,
+    ),
     '',
   ].join('\n');
 };
+
+/** Warning after the refactor when CommonJS code is left. */
+export const remainingUsagesMessage = (usages: readonly CommonJsUsage[]): string =>
+  `${usages.length} CommonJS ${plural(usages.length)} left to convert (or rename the file to .cjs / .cts):\n${formatUsages(usages, LISTED_USAGES)}`;

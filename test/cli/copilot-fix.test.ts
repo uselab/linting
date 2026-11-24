@@ -1,14 +1,21 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
-const mocks = vi.hoisted((): { spawnSync: ReturnType<typeof vi.fn>; errors: string[] } => ({
-  spawnSync: vi.fn(),
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SpawnMock = (...args: any[]) => any;
+
+const mocks = vi.hoisted((): { spawnSync: Mock<SpawnMock>; errors: string[] } => ({
+  spawnSync: vi.fn<SpawnMock>(),
   errors: [],
 }));
 
-vi.mock('node:child_process', () => ({ spawnSync: mocks.spawnSync }));
+/** The code runs `copilot` as one command string; tests see it as the arguments after `copilot`. */
+vi.mock('node:child_process', () => ({
+  spawnSync: (command: string, options: object) =>
+    mocks.spawnSync('copilot', command.match(/(?:[^\s"]|"[^"]*")+/gu)?.slice(1) ?? [], options),
+}));
 vi.mock('@clack/prompts', () => ({
   log: {
     error: (message: string) => mocks.errors.push(message),
@@ -259,6 +266,22 @@ describe('runCopilotFix', () => {
     });
     expect(content).toBe('ESLint problems of no-console:\nsrc/a.ts:3:5  error  No console.\n');
     expect(readdirSync(path.join(dir, 'node_modules/.cache/uselab-linting'))).toEqual([]);
+  });
+
+  it('uses the instructions of a task and the given details as problems file', () => {
+    let content: string | undefined;
+    mocks.spawnSync.mockImplementation((_command: string, args: string[]) => {
+      const file = /(node_modules\/\.cache\/uselab-linting\/problems-[\w-]+\.txt)/u.exec(
+        args[1] ?? '',
+      )?.[1];
+      content = file ? readFileSync(path.join(dir, file), 'utf8') : content;
+      return { status: 0 };
+    });
+    runCopilotFix(dir, 'commonjs', { files: ['a.js'], details: 'a.js:1  require()' });
+    const prompt: string = mocks.spawnSync.mock.calls[1]?.[1][1];
+    expect(content).toBe('a.js:1  require()');
+    expect(prompt).toContain('Convert the listed CommonJS code to ES modules');
+    expect(prompt).not.toContain('npx uselab-linting check');
   });
 
   it('uses the edited instructions, sanitized, after the fixed instructions', () => {

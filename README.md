@@ -20,7 +20,7 @@ npx @uselab/linting init [dir]
 Run it in a git repository without uncommitted changes, so you can review and revert everything it does. `init` replaces the existing lint/format setup:
 
 - detects the project (browser or Node, Vue, React, TypeScript, bundler, ...) and preselects presets, then asks you to confirm them (and the [query library](#query-libraries)), the [test file globs](#test-files), the [src folders](#project-structure-boundaries) and the lint scope ([`globalIgnores()`](#ignores));
-- sets `"type": "module"` in `package.json` and writes `eslint.config.ts` / `.mts` (and `prettier.config.ts` / `.mts`). An existing `@uselab/linting` config is updated in place and custom entries are kept. Remaining CommonJS code is listed in `REFACTOR-COMMON-JS.md`;
+- sets `"type": "module"` in `package.json` and writes `eslint.config.ts` / `.mts` (and `prettier.config.ts` / `.mts`). An existing `@uselab/linting` config is updated in place and custom entries are kept. When the project still has CommonJS code, you choose between **Refactor with Copilot** and **Keep type unchanged** (Refactor is the default). Copilot then converts the CommonJS code right after that question, before the other changes, with the same instructions, mode and model questions as [fix with Copilot](#analyze) and its own commit offer;
 - removes other ESLint, Prettier, Biome, TSLint, XO, oxlint and dprint configs and their packages;
 - updates `devDependencies` and adds the `lint`, `lint:fix`, `lint:analyze` scripts (plus `format`, `format:check` with `prettier` and `typecheck` with `typescript`);
 - with `typescript` in a Vite project, adds `vite-plugin-checker`; with `aliases`, adds the [path aliases](#path-aliases) to the tsconfig and `vite.config.*`; sets `noImplicitAny`;

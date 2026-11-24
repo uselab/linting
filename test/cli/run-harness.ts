@@ -20,6 +20,8 @@ type MockAnswers = {
   /** Initial values of the project type and browser files prompts. */
   environmentDefaults: (string | undefined)[];
   warnings: string[];
+  /** Answer of the "type": "module" choice (copilot or keep); its preselected value when undefined. */
+  moduleType?: string;
   /** Messages of the select prompts, in order. */
   selects: string[];
   confirm: boolean;
@@ -50,11 +52,29 @@ const hoisted = vi.hoisted(() => {
     runAnalyze: vi.fn<
       (projectDir: string, interactive: boolean, options?: { intro?: boolean }) => Promise<void>
     >(async () => {}),
+    runCopilotFix: vi.fn<
+      (
+        projectDir: string,
+        taskId: string,
+        options: { files: string[]; details?: string },
+      ) => { ok: boolean; message?: string }
+    >(() => ({ ok: true })),
   };
   return { answers, mocks };
 });
 
 export const { answers, mocks } = hoisted;
+
+vi.mock('../../src/features/cli/copilot-fix', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  isCopilotAvailable: () => true,
+  runCopilotFix: mocks.runCopilotFix,
+}));
+
+vi.mock('../../src/features/cli/copilot-notice', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  confirmCopilotStart: async () => ({ instructions: 'edited', mode: 'plan', model: 'auto' }),
+}));
 
 vi.mock('../../src/features/cli/install', async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -89,6 +109,9 @@ vi.mock('@clack/prompts', () => {
       }
       if (message.startsWith('Which library handles server state')) {
         return 'no';
+      }
+      if (message.startsWith('Set "type"')) {
+        return answers.moduleType ?? initialValue;
       }
       answers.selects.push(message);
       return answers.ignoresMode ?? initialValue;
@@ -176,6 +199,8 @@ beforeEach(() => {
   answers.analyzePrompts = [];
   mocks.runInstall.mockReset().mockReturnValue(true);
   mocks.runAnalyze.mockReset();
+  mocks.runCopilotFix.mockReset().mockReturnValue({ ok: true });
+  answers.moduleType = undefined;
   answers.testFiles = undefined;
   answers.ignoresMode = undefined;
   answers.ignoreGlobs = undefined;
